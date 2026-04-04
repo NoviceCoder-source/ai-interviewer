@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import SyntaxHighlighter from 'react-syntax-highlighter';
 import { atomOneDark } from 'react-syntax-highlighter/dist/esm/styles/hljs';
+import jsPDF from 'jspdf';
 
 interface Message {
   role: 'user' | 'assistant' | 'system';
@@ -201,10 +202,20 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
     if (!canEndInterview) return;
     setIsEvaluating(true);
     try {
+      // If the last message is from assistant (unanswered question),
+      // trim it so evaluation is only on answered Q&A pairs
+      const lastMsg = chatHistory[chatHistory.length - 1];
+      const historyForEvaluation = lastMsg?.role === 'assistant'
+        ? chatHistory.slice(0, -1)
+        : chatHistory;
+
       const response = await fetch('/api/evaluate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ history: chatHistory, subject: interview?.subject }),
+        body: JSON.stringify({ 
+          history: historyForEvaluation, 
+          subject: interview?.subject 
+        }),
       });
 
       const data = await response.json();
@@ -225,6 +236,69 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
     } finally {
       setIsEvaluating(false);
     }
+  };
+
+  // --- PDF DOWNLOAD ---
+  const handleDownloadPDF = () => {
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 15;
+    const maxWidth = pageWidth - margin * 2;
+    let y = 20;
+
+    const addText = (text: string, fontSize: number, isBold: boolean = false, color: [number, number, number] = [0, 0, 0]) => {
+      doc.setFontSize(fontSize);
+      doc.setFont('helvetica', isBold ? 'bold' : 'normal');
+      doc.setTextColor(...color);
+      const lines = doc.splitTextToSize(text, maxWidth);
+      lines.forEach((line: string) => {
+        if (y > 270) {
+          doc.addPage();
+          y = 20;
+        }
+        doc.text(line, margin, y);
+        y += fontSize * 0.5;
+      });
+      y += 3;
+    };
+
+    // Header
+    addText('AI INTERVIEWER', 20, true, [79, 70, 229]);
+    addText('Interview Chat Transcript', 12, false, [100, 100, 100]);
+    addText(`Subject: ${interview?.subject} | Difficulty: ${interview?.difficulty}`, 11, false, [100, 100, 100]);
+    addText(`Date: ${new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`, 11, false, [100, 100, 100]);
+
+    // Divider
+    y += 5;
+    doc.setDrawColor(200, 200, 200);
+    doc.line(margin, y, pageWidth - margin, y);
+    y += 10;
+
+    // Report Summary if exists
+    if (report) {
+      addText(`FINAL SCORE: ${report.score}%`, 16, true, [79, 70, 229]);
+      addText(report.summary, 11, false, [60, 60, 60]);
+      y += 5;
+      doc.line(margin, y, pageWidth - margin, y);
+      y += 10;
+    }
+
+    // Chat transcript
+    addText('CHAT TRANSCRIPT', 13, true, [40, 40, 40]);
+    y += 3;
+
+    chatHistory.forEach((msg, index) => {
+      if (msg.role === 'assistant') {
+        addText(`Interviewer:`, 10, true, [79, 70, 229]);
+        addText(msg.content, 10, false, [30, 30, 30]);
+      } else if (msg.role === 'user') {
+        addText(`Candidate:`, 10, true, [16, 185, 129]);
+        addText(msg.content, 10, false, [30, 30, 30]);
+      }
+      y += 2;
+    });
+
+    doc.save(`interview-${interview?.subject}-${interview?.difficulty}-${new Date().toISOString().slice(0, 10)}.pdf`);
   };
 
   const getScoreColor = (score: number) => {
@@ -495,10 +569,10 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
                     💾 Save & Return to Archive
                   </button>
                   <button
-                    onClick={() => setReport(null)}
-                    className="w-full text-gray-400 font-bold text-[10px] uppercase tracking-[0.3em] hover:text-black py-2 transition-colors text-center"
+                    onClick={handleDownloadPDF}
+                    className="w-full bg-indigo-50 text-indigo-700 py-5 rounded-[1.5rem] font-black uppercase text-xs tracking-[0.2em] hover:bg-indigo-100 transition-all border border-indigo-100"
                   >
-                    Return to Session
+                    📄 Download Chat as PDF
                   </button>
                 </div>
 
