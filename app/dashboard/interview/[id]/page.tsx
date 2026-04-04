@@ -41,6 +41,30 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
   const scrollRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
+  // --- UNIQUE QUESTION DETECTION ---
+  const assistantMessages = chatHistory.filter(m => m.role === 'assistant');
+
+  const uniqueQuestions = assistantMessages.filter((msg, index) => {
+    if (index === 0) return true;
+
+    const currentFingerprint = msg.content.slice(0, 80).toLowerCase().trim();
+
+    const isDuplicate = assistantMessages.slice(0, index).some(prevMsg => {
+      const prevFingerprint = prevMsg.content.slice(0, 80).toLowerCase().trim();
+      const currentWords = new Set(currentFingerprint.split(' '));
+      const prevWords = new Set(prevFingerprint.split(' '));
+      const overlap = [...currentWords].filter(w => prevWords.has(w)).length;
+      const similarity = overlap / Math.max(currentWords.size, prevWords.size);
+      return similarity > 0.6;
+    });
+
+    return !isDuplicate;
+  });
+
+  const questionsAsked = uniqueQuestions.length;
+  const minQuestionsRequired = 5;
+  const canEndInterview = questionsAsked >= minQuestionsRequired;
+
   useEffect(() => {
     const startSession = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -55,19 +79,15 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
       if (data) {
         setInterview(data);
 
-        // Restore saved chat history if it exists
         if (data.chat_history && data.chat_history.length > 0) {
           setChatHistory(data.chat_history);
         }
 
         if (data.report) {
-          // Viewing old report — just show it with restored chat
           setReport(data.report as EvaluationReport);
         } else if (!data.chat_history || data.chat_history.length === 0) {
-          // Brand new session — trigger greeting
           await triggerFirstGreeting(data.subject, user?.id);
         } else {
-          // Returning to an in-progress session — send welcome back message
           await triggerWelcomeBack(data.subject, user?.id, data.chat_history);
         }
       }
@@ -89,7 +109,6 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
         if (chatData.text) {
           const initialHistory = [{ role: 'assistant' as const, content: chatData.text }];
           setChatHistory(initialHistory);
-          // Save initial greeting to DB
           await supabase.from('interviews').update({ chat_history: initialHistory }).eq('id', interviewId);
         }
       } catch (err) {
@@ -166,7 +185,6 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
       if (data.text) {
         const newHistory = [...updatedHistory, { role: 'assistant' as const, content: data.text }];
         setChatHistory(newHistory);
-        // Save updated chat history to DB after every message
         await supabase.from('interviews').update({ chat_history: newHistory }).eq('id', interviewId);
       }
     } catch (err) {
@@ -177,6 +195,7 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
   };
 
   const handleEndInterview = async () => {
+    if (!canEndInterview) return;
     setIsEvaluating(true);
     try {
       const response = await fetch('/api/evaluate', {
@@ -195,7 +214,6 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
       };
 
       setReport(finalReport);
-      // Save both the report and final chat history
       await supabase.from('interviews')
         .update({ report: finalReport, chat_history: chatHistory })
         .eq('id', interviewId);
@@ -207,10 +225,10 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
   };
 
   const getScoreColor = (score: number) => {
-    if (score >= 80) return { text: 'text-emerald-600', bg: 'bg-emerald-500', label: 'Excellent', ring: 'ring-emerald-200' };
-    if (score >= 60) return { text: 'text-indigo-600', bg: 'bg-indigo-500', label: 'Good', ring: 'ring-indigo-200' };
-    if (score >= 40) return { text: 'text-amber-600', bg: 'bg-amber-500', label: 'Average', ring: 'ring-amber-200' };
-    return { text: 'text-red-600', bg: 'bg-red-500', label: 'Needs Work', ring: 'ring-red-200' };
+    if (score >= 80) return { text: 'text-emerald-600', bg: 'bg-emerald-500', label: 'Excellent' };
+    if (score >= 60) return { text: 'text-indigo-600', bg: 'bg-indigo-500', label: 'Good' };
+    if (score >= 40) return { text: 'text-amber-600', bg: 'bg-amber-500', label: 'Average' };
+    return { text: 'text-red-600', bg: 'bg-red-500', label: 'Needs Work' };
   };
 
   const MarkdownContent = ({ content }: { content: string }) => (
@@ -267,12 +285,35 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
               SESSION / <span className="text-indigo-400">{interview?.subject || 'INITIALIZING'}</span>
             </h1>
           </div>
-          <button
-            onClick={handleEndInterview}
-            className="bg-white text-black px-8 py-3 rounded-full font-black uppercase text-[10px] tracking-widest hover:bg-red-500 hover:text-white transition-all shadow-xl"
-          >
-            End & Grade
-          </button>
+
+          {/* END & GRADE BUTTON WITH PROGRESS */}
+          <div className="flex items-center gap-3">
+            {!canEndInterview && (
+              <div className="text-right">
+                <p className="text-white/40 text-[10px] font-black uppercase tracking-widest">
+                  {questionsAsked}/{minQuestionsRequired} unique questions
+                </p>
+                <div className="w-32 bg-white/10 rounded-full h-1.5 mt-1">
+                  <div
+                    className="bg-indigo-500 h-1.5 rounded-full transition-all duration-500"
+                    style={{ width: `${Math.min((questionsAsked / minQuestionsRequired) * 100, 100)}%` }}
+                  />
+                </div>
+              </div>
+            )}
+            <button
+              onClick={handleEndInterview}
+              disabled={!canEndInterview}
+              title={!canEndInterview ? `${minQuestionsRequired - questionsAsked} more unique questions needed` : 'End interview and get your grade'}
+              className={`px-8 py-3 rounded-full font-black uppercase text-[10px] tracking-widest transition-all shadow-xl ${
+                canEndInterview
+                  ? 'bg-white text-black hover:bg-red-500 hover:text-white cursor-pointer'
+                  : 'bg-white/10 text-white/30 cursor-not-allowed'
+              }`}
+            >
+              End & Grade
+            </button>
+          </div>
         </header>
 
         {/* CHAT INTERFACE */}
@@ -427,9 +468,9 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
                   </div>
                   <div className="bg-white rounded-[2rem] p-6 shadow-xl text-center">
                     <p className="text-3xl font-black text-gray-900">
-                      {chatHistory.filter(m => m.role === 'assistant').length}
+                      {questionsAsked}
                     </p>
-                    <p className="text-[9px] font-black uppercase tracking-widest text-gray-400 mt-1">Questions Asked</p>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-gray-400 mt-1">Unique Questions</p>
                   </div>
                   <div className="bg-white rounded-[2rem] p-6 shadow-xl text-center">
                     <p className={`text-3xl font-black ${scoreColors.text}`}>{scoreColors.label}</p>
