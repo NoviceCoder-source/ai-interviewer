@@ -86,14 +86,14 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
         if (data.report) {
           setReport(data.report as EvaluationReport);
         } else if (!data.chat_history || data.chat_history.length === 0) {
-          await triggerFirstGreeting(data.subject, user?.id);
+          await triggerFirstGreeting(data.subject, data.difficulty, user?.id);
         } else {
-          await triggerWelcomeBack(data.subject, user?.id, data.chat_history);
+          await triggerWelcomeBack(data.subject, data.difficulty, user?.id, data.chat_history);
         }
       }
     };
 
-    const triggerFirstGreeting = async (subject: string, userId?: string) => {
+    const triggerFirstGreeting = async (subject: string, difficulty: string, userId?: string) => {
       setIsThinking(true);
       try {
         const res = await fetch('/api/chat', {
@@ -102,6 +102,7 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
           body: JSON.stringify({
             messages: [{ role: 'user', content: "Hello! I am ready to start. Please introduce yourself and ask me the first question." }],
             subject: subject,
+            difficulty: difficulty,
             userId: userId
           }),
         });
@@ -118,7 +119,7 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
       }
     };
 
-    const triggerWelcomeBack = async (subject: string, userId?: string, existingHistory?: Message[]) => {
+    const triggerWelcomeBack = async (subject: string, difficulty: string, userId?: string, existingHistory?: Message[]) => {
       setIsThinking(true);
       try {
         const welcomePrompt = [...(existingHistory || []), {
@@ -132,6 +133,7 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
           body: JSON.stringify({
             messages: welcomePrompt,
             subject: subject,
+            difficulty: difficulty,
             userId: userId
           }),
         });
@@ -177,6 +179,7 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
         body: JSON.stringify({
           messages: updatedHistory,
           subject: interview?.subject,
+          difficulty: interview?.difficulty,
           userId: currentUserId
         }),
       });
@@ -283,6 +286,11 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
             <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
             <h1 className="text-white text-xl font-black uppercase tracking-widest italic">
               SESSION / <span className="text-indigo-400">{interview?.subject || 'INITIALIZING'}</span>
+              {interview?.difficulty && (
+                <span className="ml-3 text-xs font-black text-white/30 normal-case tracking-widest">
+                  [{interview.difficulty}]
+                </span>
+              )}
             </h1>
           </div>
 

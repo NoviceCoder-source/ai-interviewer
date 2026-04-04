@@ -41,8 +41,9 @@ export default function SetupInterviewPage() {
 
       router.push(`/dashboard/interview/${data.id}`);
 
-    } catch (error: any) {
-      console.error("Error saving interview:", error.message);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+      console.error("Error saving interview:", errorMessage);
       alert("Failed to save interview.");
     } finally {
       setIsLoading(false);
@@ -154,19 +155,26 @@ export default function SetupInterviewPage() {
                 <label className="block text-sm font-bold text-gray-700 mb-2">
                   Select Difficulty
                 </label>
-                <div className="grid grid-cols-3 gap-3">
-                  {['Beginner', 'Intermediate', 'Advanced'].map((level) => (
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { level: 'Fresher', desc: 'No experience', emoji: '🌱' },
+                    { level: 'Beginner', desc: 'Some basics', emoji: '📘' },
+                    { level: 'Intermediate', desc: 'Working knowledge', emoji: '⚡' },
+                    { level: 'Advanced', desc: 'Expert level', emoji: '🔥' },
+                  ].map(({ level, desc, emoji }) => (
                     <button
                       key={level}
                       type="button"
                       onClick={() => setDifficulty(level)}
-                      className={`py-2 px-1 text-sm font-bold rounded-lg border transition-all ${
+                      className={`py-3 px-3 text-left rounded-xl border transition-all ${
                         difficulty === level
                           ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
                           : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-300 hover:bg-indigo-50'
                       }`}
                     >
-                      {level}
+                      <div className="text-lg mb-1">{emoji}</div>
+                      <div className="font-bold text-sm">{level}</div>
+                      <div className={`text-[10px] ${difficulty === level ? 'text-indigo-200' : 'text-gray-400'}`}>{desc}</div>
                     </button>
                   ))}
                 </div>
