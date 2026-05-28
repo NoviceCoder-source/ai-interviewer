@@ -301,7 +301,26 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
     }
   };
 
-  // ── PDF download (unchanged) ─────────────────────────────────────────────
+  // ── Strip markdown syntax for clean PDF output ───────────────────────────
+  const stripMarkdown = (text: string): string => {
+    return text
+      .replace(/```[\s\S]*?```/g, '[code block]') // fenced code blocks
+      .replace(/`([^`]+)`/g, '$1')                // inline code
+      .replace(/#{1,6}\s+/g, '')                  // headings
+      .replace(/\*\*(.+?)\*\*/g, '$1')            // bold
+      .replace(/\*(.+?)\*/g, '$1')                // italic
+      .replace(/~~(.+?)~~/g, '$1')                // strikethrough
+      .replace(/!\[.*?\]\(.*?\)/g, '')            // images
+      .replace(/\[(.+?)\]\(.*?\)/g, '$1')         // links → keep label
+      .replace(/^\s*[-*+]\s+/gm, '• ')            // unordered lists
+      .replace(/^\s*\d+\.\s+/gm, '')              // ordered lists
+      .replace(/^\s*>\s+/gm, '')                  // blockquotes
+      .replace(/---/g, '─────────────────')       // horizontal rules
+      .replace(/\n{3,}/g, '\n\n')                 // collapse excess newlines
+      .trim();
+  };
+
+  // ── PDF download ─────────────────────────────────────────────────────────
   const handleDownloadPDF = () => {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
@@ -346,10 +365,10 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
     chatHistory.forEach((msg) => {
       if (msg.role === 'assistant') {
         addText('Interviewer:', 10, true, [79, 70, 229]);
-        addText(msg.content, 10, false, [30, 30, 30]);
+        addText(stripMarkdown(msg.content), 10, false, [30, 30, 30]);
       } else if (msg.role === 'user') {
         addText('Candidate:', 10, true, [16, 185, 129]);
-        addText(msg.content, 10, false, [30, 30, 30]);
+        addText(stripMarkdown(msg.content), 10, false, [30, 30, 30]);
       }
       y += 2;
     });

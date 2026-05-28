@@ -61,6 +61,24 @@ export default function ReviewReportPage({ params }: { params: Promise<{ id: str
     return { text: 'text-red-600', bg: 'bg-red-500', label: 'Needs Work' };
   };
 
+  const stripMarkdown = (text: string): string => {
+    return text
+      .replace(/```[\s\S]*?```/g, '[code block]')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/#{1,6}\s+/g, '')
+      .replace(/\*\*(.+?)\*\*/g, '$1')
+      .replace(/\*(.+?)\*/g, '$1')
+      .replace(/~~(.+?)~~/g, '$1')
+      .replace(/!\[.*?\]\(.*?\)/g, '')
+      .replace(/\[(.+?)\]\(.*?\)/g, '$1')
+      .replace(/^\s*[-*+]\s+/gm, '• ')
+      .replace(/^\s*\d+\.\s+/gm, '')
+      .replace(/^\s*>\s+/gm, '')
+      .replace(/---/g, '─────────────────')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  };
+
   const handleDownloadPDF = () => {
     if (!interview) return;
     const doc = new jsPDF();
@@ -104,10 +122,10 @@ export default function ReviewReportPage({ params }: { params: Promise<{ id: str
     interview.chat_history?.forEach((msg) => {
       if (msg.role === 'assistant') {
         addText('Interviewer:', 10, true, [79, 70, 229]);
-        addText(msg.content, 10, false, [30, 30, 30]);
+        addText(stripMarkdown(msg.content), 10, false, [30, 30, 30]);
       } else if (msg.role === 'user') {
         addText('Candidate:', 10, true, [16, 185, 129]);
-        addText(msg.content, 10, false, [30, 30, 30]);
+        addText(stripMarkdown(msg.content), 10, false, [30, 30, 30]);
       }
       y += 2;
     });
