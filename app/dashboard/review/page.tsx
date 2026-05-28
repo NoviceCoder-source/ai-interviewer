@@ -3,7 +3,6 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useRouter } from 'next/navigation';
 
-// --- TYPE DEFINITIONS (No more 'any'!) ---
 interface EvaluationReport {
   score: number;
   summary: string;
@@ -30,7 +29,7 @@ export default function ReviewSessions() {
         const { data, error } = await supabase
           .from('interviews')
           .select('*')
-          .not('report', 'is', null) // Only fetch interviews that have a completed report
+          .not('report', 'is', null)
           .order('created_at', { ascending: false });
 
         if (error) throw error;
@@ -48,7 +47,7 @@ export default function ReviewSessions() {
   if (loading) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-gray-50">
-        <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mb-4"></div>
+        <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mb-4" />
         <p className="text-indigo-600 font-black uppercase tracking-widest text-xs">Loading History...</p>
       </div>
     );
@@ -57,9 +56,8 @@ export default function ReviewSessions() {
   return (
     <div className="min-h-screen bg-gray-50 p-6 md:p-12 font-sans">
       <div className="max-w-5xl mx-auto">
-        {/* Navigation */}
-        <button 
-          onClick={() => router.push('/dashboard')} 
+        <button
+          onClick={() => router.push('/dashboard')}
           className="group mb-8 flex items-center gap-2 text-indigo-600 font-black text-xs uppercase tracking-widest hover:text-black transition-colors"
         >
           <span className="group-hover:-translate-x-1 transition-transform">←</span> Back to Dashboard
@@ -72,12 +70,11 @@ export default function ReviewSessions() {
           <p className="text-gray-500 font-medium mt-2">Track your growth and review AI feedback from past sessions.</p>
         </header>
 
-        {/* Sessions List */}
         <div className="grid gap-6">
           {sessions.length > 0 ? (
             sessions.map((session) => (
-              <div 
-                key={session.id} 
+              <div
+                key={session.id}
                 className="group bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-sm hover:shadow-xl hover:shadow-indigo-100/50 transition-all flex flex-col md:flex-row justify-between items-center gap-6"
               >
                 <div className="flex-1">
@@ -99,9 +96,10 @@ export default function ReviewSessions() {
                     </span>
                     <span className="text-[9px] font-black text-gray-400 uppercase tracking-[0.2em]">Final Grade</span>
                   </div>
-                  
-                  <button 
-                    onClick={() => router.push(`/dashboard/interview/${session.id}`)}
+
+                  {/* ── FIX: routes to read-only report page, not the interview room ── */}
+                  <button
+                    onClick={() => router.push(`/dashboard/review/${session.id}`)}
                     className="bg-gray-900 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-600 hover:scale-105 active:scale-95 transition-all shadow-lg"
                   >
                     Review Report
@@ -116,7 +114,7 @@ export default function ReviewSessions() {
               <p className="text-gray-400 font-medium mt-2 max-w-xs mx-auto">
                 Once you complete an interview, your detailed report will appear here.
               </p>
-              <button 
+              <button
                 onClick={() => router.push('/dashboard')}
                 className="mt-8 bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest"
               >
