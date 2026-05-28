@@ -42,7 +42,6 @@ export default function ReviewReportPage({ params }: { params: Promise<{ id: str
         .single();
 
       if (error || !data?.report) {
-        // No report found — redirect back to archive
         router.push('/dashboard/review');
         return;
       }
@@ -149,17 +148,39 @@ export default function ReviewReportPage({ params }: { params: Promise<{ id: str
   const userResponses = interview.chat_history?.filter(m => m.role === 'user').length ?? 0;
   const assistantMessages = interview.chat_history?.filter(m => m.role === 'assistant') ?? [];
 
-  // Reuse the same unique question detection logic
+  const STOP_WORDS = new Set([
+    'what','is','are','the','a','an','in','of','to','do','does','how',
+    'why','when','where','which','can','you','your','it','its','this',
+    'that','and','or','for','with','about','between','explain','describe',
+    'define','tell','me','difference','use','used','give','example','write',
+    'simple','basic','python','sql','data','machine','learning','analytics'
+  ]);
+
+  const extractQuestion = (content: string): string => {
+    const sentences = content.split(/(?<=[.?!])\s+/);
+    const questionSentence = sentences.find(s => s.trim().endsWith('?'))
+      || sentences[sentences.length - 1];
+    return questionSentence.toLowerCase().trim();
+  };
+
+  const getKeywords = (text: string): Set<string> => {
+    const words = text
+      .replace(/[^a-z0-9\s]/g, '')
+      .split(/\s+/)
+      .filter(w => w.length > 2 && !STOP_WORDS.has(w));
+    return new Set(words);
+  };
+
   const uniqueQuestions = assistantMessages.filter((msg, index) => {
     if (index === 0) return true;
-    const currentFingerprint = msg.content.slice(0, 80).toLowerCase().trim();
+    const currentKeywords = getKeywords(extractQuestion(msg.content));
+    if (currentKeywords.size === 0) return true;
     const isDuplicate = assistantMessages.slice(0, index).some(prevMsg => {
-      const prevFingerprint = prevMsg.content.slice(0, 80).toLowerCase().trim();
-      const currentWords = new Set(currentFingerprint.split(' '));
-      const prevWords = new Set(prevFingerprint.split(' '));
-      const overlap = [...currentWords].filter(w => prevWords.has(w)).length;
-      const similarity = overlap / Math.max(currentWords.size, prevWords.size);
-      return similarity > 0.6;
+      const prevKeywords = getKeywords(extractQuestion(prevMsg.content));
+      if (prevKeywords.size === 0) return false;
+      const overlap = [...currentKeywords].filter(w => prevKeywords.has(w)).length;
+      const similarity = overlap / Math.max(currentKeywords.size, prevKeywords.size);
+      return similarity >= 0.75;
     });
     return !isDuplicate;
   });
@@ -266,7 +287,7 @@ export default function ReviewReportPage({ params }: { params: Promise<{ id: str
           </div>
         </div>
 
-        {/* Actions */}
+        {/* Actions — "Back to Archive" since this page is accessed from Past Sessions */}
         <div className="bg-white rounded-[2.5rem] p-6 shadow-xl flex flex-col gap-3">
           <button
             onClick={handleDownloadPDF}

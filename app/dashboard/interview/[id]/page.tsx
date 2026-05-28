@@ -43,21 +43,14 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
   const scrollRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
-  // ── FIX 1: Race condition guard ──────────────────────────────────────────
-  // Prevents double-invocation in React Strict Mode / fast remounts from
-  // firing two simultaneous greeting API calls and double-writing to Supabase.
+  // ── Race condition guard ──────────────────────────────────────────────────
   const initializedRef = useRef(false);
 
-  // ── FIX 2: Batched Supabase writes ───────────────────────────────────────
-  // Instead of writing to Supabase after every single message exchange,
-  // we track a "dirty" flag and only flush every WRITE_BATCH_SIZE messages.
-  // A beforeunload listener guarantees the final flush when the tab closes.
+  // ── Batched Supabase writes ───────────────────────────────────────────────
   const WRITE_BATCH_SIZE = 3;
   const messagesSinceLastWrite = useRef(0);
   const latestHistoryRef = useRef<Message[]>([]);
 
-  // Keep latestHistoryRef in sync so the beforeunload handler always has
-  // the most recent history without needing a stale closure.
   useEffect(() => {
     latestHistoryRef.current = chatHistory;
   }, [chatHistory]);
@@ -66,10 +59,12 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
   useEffect(() => {
     const handleUnload = () => {
       if (messagesSinceLastWrite.current > 0) {
-        // sendBeacon keeps the request alive after the page unloads.
         navigator.sendBeacon(
           `/api/save-history`,
-          JSON.stringify({ id: interviewId, chat_history: latestHistoryRef.current })
+          new Blob(
+            [JSON.stringify({ id: interviewId, chat_history: latestHistoryRef.current })],
+            { type: 'application/json' }
+          )
         );
       }
     };
@@ -77,11 +72,6 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
     return () => window.removeEventListener('beforeunload', handleUnload);
   }, [interviewId]);
 
-  /**
-   * Persist chat history to Supabase.
-   * Pass force=true to write immediately (used on End Interview and after
-   * the greeting message so the very first message is always saved).
-   */
   const saveHistory = async (history: Message[], force = false) => {
     messagesSinceLastWrite.current += 1;
     const shouldWrite = force || messagesSinceLastWrite.current >= WRITE_BATCH_SIZE;
@@ -95,20 +85,47 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
     }
   };
 
-  // ── Unique question detection (unchanged) ────────────────────────────────
+  // ── Unique question detection ─────────────────────────────────────────────
+  const STOP_WORDS = new Set([
+    'what','is','are','the','a','an','in','of','to','do','does','how',
+    'why','when','where','which','can','you','your','it','its','this',
+    'that','and','or','for','with','about','between','explain','describe',
+    'define','tell','me','difference','use','used','give','example','write',
+    'simple','basic','python','sql','data','machine','learning','analytics'
+  ]);
+
+  const extractQuestion = (content: string): string => {
+    const sentences = content.split(/(?<=[.?!])\s+/);
+    const questionSentence = sentences.find(s => s.trim().endsWith('?'))
+      || sentences[sentences.length - 1];
+    return questionSentence.toLowerCase().trim();
+  };
+
+  const getKeywords = (text: string): Set<string> => {
+    const words = text
+      .replace(/[^a-z0-9\s]/g, '')
+      .split(/\s+/)
+      .filter(w => w.length > 2 && !STOP_WORDS.has(w));
+    return new Set(words);
+  };
+
   const assistantMessages = chatHistory.filter(m => m.role === 'assistant');
 
   const uniqueQuestions = assistantMessages.filter((msg, index) => {
     if (index === 0) return true;
-    const currentFingerprint = msg.content.slice(0, 80).toLowerCase().trim();
+
+    const currentKeywords = getKeywords(extractQuestion(msg.content));
+    if (currentKeywords.size === 0) return true;
+
     const isDuplicate = assistantMessages.slice(0, index).some(prevMsg => {
-      const prevFingerprint = prevMsg.content.slice(0, 80).toLowerCase().trim();
-      const currentWords = new Set(currentFingerprint.split(' '));
-      const prevWords = new Set(prevFingerprint.split(' '));
-      const overlap = [...currentWords].filter(w => prevWords.has(w)).length;
-      const similarity = overlap / Math.max(currentWords.size, prevWords.size);
-      return similarity > 0.6;
+      const prevKeywords = getKeywords(extractQuestion(prevMsg.content));
+      if (prevKeywords.size === 0) return false;
+
+      const overlap = [...currentKeywords].filter(w => prevKeywords.has(w)).length;
+      const similarity = overlap / Math.max(currentKeywords.size, prevKeywords.size);
+      return similarity >= 0.75;
     });
+
     return !isDuplicate;
   });
 
@@ -118,9 +135,6 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
 
   // ── Session initialisation ───────────────────────────────────────────────
   useEffect(() => {
-    // ── FIX 1 applied here ──
-    // Guard runs once per mount. On the second Strict Mode invocation the
-    // ref is already true, so we bail out before hitting the API.
     if (initializedRef.current) return;
     initializedRef.current = true;
 
@@ -137,16 +151,19 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
       if (data) {
         setInterview(data);
 
-        if (data.chat_history && data.chat_history.length > 0) {
-          setChatHistory(data.chat_history);
+        // ── FIX: If session is already graded, redirect to read-only report
+        // page immediately. Handles direct URL access and back button.
+        if (data.report) {
+          router.replace(`/dashboard/review/${interviewId}`);
+          return;
         }
 
-        if (data.report) {
-          setReport(data.report as EvaluationReport);
-        } else if (!data.chat_history || data.chat_history.length === 0) {
-          await triggerFirstGreeting(data.subject, data.difficulty, user?.id);
+        if (data.chat_history && data.chat_history.length > 0) {
+          // In-progress session — resume silently, no welcome-back needed
+          setChatHistory(data.chat_history);
         } else {
-          await triggerWelcomeBack(data.subject, data.difficulty, user?.id, data.chat_history);
+          // Brand new session — trigger first greeting
+          await triggerFirstGreeting(data.subject, data.difficulty, user?.id);
         }
       }
     };
@@ -168,40 +185,10 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
         if (chatData.text) {
           const initialHistory: Message[] = [{ role: 'assistant', content: chatData.text }];
           setChatHistory(initialHistory);
-          // Force-write the very first message so it's never lost.
           await saveHistory(initialHistory, true);
         }
       } catch (err) {
         console.error("Initial Chat Error:", err);
-      } finally {
-        setIsThinking(false);
-      }
-    };
-
-    const triggerWelcomeBack = async (subject: string, difficulty: string, userId?: string, existingHistory?: Message[]) => {
-      setIsThinking(true);
-      try {
-        const welcomePrompt = [
-          ...(existingHistory || []),
-          { role: 'user' as const, content: "I'm back! Please give me a brief welcome back message and remind me where we left off, then continue the interview." },
-        ];
-        const res = await fetch('/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: welcomePrompt, subject, difficulty, userId }),
-        });
-        const chatData = await res.json();
-        if (chatData.text) {
-          const updatedHistory: Message[] = [
-            ...(existingHistory || []),
-            { role: 'assistant', content: chatData.text },
-          ];
-          setChatHistory(updatedHistory);
-          // Force-write the welcome-back message immediately.
-          await saveHistory(updatedHistory, true);
-        }
-      } catch (err) {
-        console.error("Welcome Back Error:", err);
       } finally {
         setIsThinking(false);
       }
@@ -244,7 +231,6 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
       if (data.text) {
         const newHistory: Message[] = [...updatedHistory, { role: 'assistant', content: data.text }];
         setChatHistory(newHistory);
-        // ── FIX 2 applied here: batched write, not forced ──
         await saveHistory(newHistory);
       }
     } catch (err) {
@@ -258,7 +244,6 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
   const handleEndInterview = async () => {
     if (!canEndInterview) return;
 
-    // Disable input immediately so no new messages can be sent during evaluation.
     setIsInputDisabled(true);
     setIsEvaluating(true);
 
@@ -285,17 +270,15 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
 
       setReport(finalReport);
 
-      // Force-write the final state plus the report in one go.
       await supabase
         .from('interviews')
         .update({ report: finalReport, chat_history: chatHistory })
         .eq('id', interviewId);
 
-      // Reset dirty counter since we just did a full write.
       messagesSinceLastWrite.current = 0;
     } catch (e) {
       console.error("Evaluation Error:", e);
-      setIsInputDisabled(false); // Re-enable input if evaluation fails
+      setIsInputDisabled(false);
     } finally {
       setIsEvaluating(false);
     }
@@ -304,19 +287,19 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
   // ── Strip markdown syntax for clean PDF output ───────────────────────────
   const stripMarkdown = (text: string): string => {
     return text
-      .replace(/```[\s\S]*?```/g, '[code block]') // fenced code blocks
-      .replace(/`([^`]+)`/g, '$1')                // inline code
-      .replace(/#{1,6}\s+/g, '')                  // headings
-      .replace(/\*\*(.+?)\*\*/g, '$1')            // bold
-      .replace(/\*(.+?)\*/g, '$1')                // italic
-      .replace(/~~(.+?)~~/g, '$1')                // strikethrough
-      .replace(/!\[.*?\]\(.*?\)/g, '')            // images
-      .replace(/\[(.+?)\]\(.*?\)/g, '$1')         // links → keep label
-      .replace(/^\s*[-*+]\s+/gm, '• ')            // unordered lists
-      .replace(/^\s*\d+\.\s+/gm, '')              // ordered lists
-      .replace(/^\s*>\s+/gm, '')                  // blockquotes
-      .replace(/---/g, '─────────────────')       // horizontal rules
-      .replace(/\n{3,}/g, '\n\n')                 // collapse excess newlines
+      .replace(/```[\s\S]*?```/g, '[code block]')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/#{1,6}\s+/g, '')
+      .replace(/\*\*(.+?)\*\*/g, '$1')
+      .replace(/\*(.+?)\*/g, '$1')
+      .replace(/~~(.+?)~~/g, '$1')
+      .replace(/!\[.*?\]\(.*?\)/g, '')
+      .replace(/\[(.+?)\]\(.*?\)/g, '$1')
+      .replace(/^\s*[-*+]\s+/gm, '• ')
+      .replace(/^\s*\d+\.\s+/gm, '')
+      .replace(/^\s*>\s+/gm, '')
+      .replace(/---/g, '─────────────────')
+      .replace(/\n{3,}/g, '\n\n')
       .trim();
   };
 
@@ -606,11 +589,20 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
                   </div>
                 </div>
 
+                {/* ── FIX: "Return to Dashboard" instead of "Return to Archive"
+                    router.replace removes the interview room from history so
+                    the back button goes to dashboard, not back here. ── */}
                 <div className="bg-white rounded-[2.5rem] p-6 shadow-xl flex flex-col gap-3">
-                  <button onClick={() => router.push('/dashboard/review')} className="w-full bg-gray-900 text-white py-5 rounded-[1.5rem] font-black uppercase text-xs tracking-[0.2em] hover:bg-indigo-600 transition-all shadow-xl">
-                    💾 Save & Return to Archive
+                  <button
+                    onClick={() => router.replace('/dashboard')}
+                    className="w-full bg-gray-900 text-white py-5 rounded-[1.5rem] font-black uppercase text-xs tracking-[0.2em] hover:bg-indigo-600 transition-all shadow-xl"
+                  >
+                    🏠 Save & Return to Student Dashboard
                   </button>
-                  <button onClick={handleDownloadPDF} className="w-full bg-indigo-50 text-indigo-700 py-5 rounded-[1.5rem] font-black uppercase text-xs tracking-[0.2em] hover:bg-indigo-100 transition-all border border-indigo-100">
+                  <button
+                    onClick={handleDownloadPDF}
+                    className="w-full bg-indigo-50 text-indigo-700 py-5 rounded-[1.5rem] font-black uppercase text-xs tracking-[0.2em] hover:bg-indigo-100 transition-all border border-indigo-100"
+                  >
                     📄 Download Chat as PDF
                   </button>
                 </div>
