@@ -129,7 +129,14 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
     return !isDuplicate;
   });
 
-  const questionsAsked = uniqueQuestions.length;
+  // Only count questions that actually received a user response.
+  // This prevents the last unanswered question from inflating the counter
+  // when the user clicks "End & Grade" without answering it.
+  const questionsAsked = uniqueQuestions.filter((msg) => {
+    const msgIndex = chatHistory.indexOf(msg);
+    const nextMsg = chatHistory[msgIndex + 1];
+    return nextMsg?.role === 'user';
+  }).length;
   const minQuestionsRequired = 5;
   const canEndInterview = questionsAsked >= minQuestionsRequired;
 
