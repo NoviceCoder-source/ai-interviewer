@@ -37,19 +37,70 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [report, setReport] = useState<EvaluationReport | null>(null);
   const [isThinking, setIsThinking] = useState(false);
+  const [isInputDisabled, setIsInputDisabled] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
-  // --- UNIQUE QUESTION DETECTION ---
+  // ── FIX 1: Race condition guard ──────────────────────────────────────────
+  // Prevents double-invocation in React Strict Mode / fast remounts from
+  // firing two simultaneous greeting API calls and double-writing to Supabase.
+  const initializedRef = useRef(false);
+
+  // ── FIX 2: Batched Supabase writes ───────────────────────────────────────
+  // Instead of writing to Supabase after every single message exchange,
+  // we track a "dirty" flag and only flush every WRITE_BATCH_SIZE messages.
+  // A beforeunload listener guarantees the final flush when the tab closes.
+  const WRITE_BATCH_SIZE = 3;
+  const messagesSinceLastWrite = useRef(0);
+  const latestHistoryRef = useRef<Message[]>([]);
+
+  // Keep latestHistoryRef in sync so the beforeunload handler always has
+  // the most recent history without needing a stale closure.
+  useEffect(() => {
+    latestHistoryRef.current = chatHistory;
+  }, [chatHistory]);
+
+  // Flush unsaved messages when the user closes/navigates away.
+  useEffect(() => {
+    const handleUnload = () => {
+      if (messagesSinceLastWrite.current > 0) {
+        // sendBeacon keeps the request alive after the page unloads.
+        navigator.sendBeacon(
+          `/api/save-history`,
+          JSON.stringify({ id: interviewId, chat_history: latestHistoryRef.current })
+        );
+      }
+    };
+    window.addEventListener('beforeunload', handleUnload);
+    return () => window.removeEventListener('beforeunload', handleUnload);
+  }, [interviewId]);
+
+  /**
+   * Persist chat history to Supabase.
+   * Pass force=true to write immediately (used on End Interview and after
+   * the greeting message so the very first message is always saved).
+   */
+  const saveHistory = async (history: Message[], force = false) => {
+    messagesSinceLastWrite.current += 1;
+    const shouldWrite = force || messagesSinceLastWrite.current >= WRITE_BATCH_SIZE;
+
+    if (shouldWrite) {
+      messagesSinceLastWrite.current = 0;
+      await supabase
+        .from('interviews')
+        .update({ chat_history: history })
+        .eq('id', interviewId);
+    }
+  };
+
+  // ── Unique question detection (unchanged) ────────────────────────────────
   const assistantMessages = chatHistory.filter(m => m.role === 'assistant');
 
   const uniqueQuestions = assistantMessages.filter((msg, index) => {
     if (index === 0) return true;
-
     const currentFingerprint = msg.content.slice(0, 80).toLowerCase().trim();
-
     const isDuplicate = assistantMessages.slice(0, index).some(prevMsg => {
       const prevFingerprint = prevMsg.content.slice(0, 80).toLowerCase().trim();
       const currentWords = new Set(currentFingerprint.split(' '));
@@ -58,7 +109,6 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
       const similarity = overlap / Math.max(currentWords.size, prevWords.size);
       return similarity > 0.6;
     });
-
     return !isDuplicate;
   });
 
@@ -66,7 +116,14 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
   const minQuestionsRequired = 5;
   const canEndInterview = questionsAsked >= minQuestionsRequired;
 
+  // ── Session initialisation ───────────────────────────────────────────────
   useEffect(() => {
+    // ── FIX 1 applied here ──
+    // Guard runs once per mount. On the second Strict Mode invocation the
+    // ref is already true, so we bail out before hitting the API.
+    if (initializedRef.current) return;
+    initializedRef.current = true;
+
     const startSession = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) setCurrentUserId(user.id);
@@ -102,16 +159,17 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             messages: [{ role: 'user', content: "Hello! I am ready to start. Please introduce yourself and ask me the first question." }],
-            subject: subject,
-            difficulty: difficulty,
-            userId: userId
+            subject,
+            difficulty,
+            userId,
           }),
         });
         const chatData = await res.json();
         if (chatData.text) {
-          const initialHistory = [{ role: 'assistant' as const, content: chatData.text }];
+          const initialHistory: Message[] = [{ role: 'assistant', content: chatData.text }];
           setChatHistory(initialHistory);
-          await supabase.from('interviews').update({ chat_history: initialHistory }).eq('id', interviewId);
+          // Force-write the very first message so it's never lost.
+          await saveHistory(initialHistory, true);
         }
       } catch (err) {
         console.error("Initial Chat Error:", err);
@@ -123,29 +181,24 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
     const triggerWelcomeBack = async (subject: string, difficulty: string, userId?: string, existingHistory?: Message[]) => {
       setIsThinking(true);
       try {
-        const welcomePrompt = [...(existingHistory || []), {
-          role: 'user' as const,
-          content: "I'm back! Please give me a brief welcome back message and remind me where we left off, then continue the interview."
-        }];
-
+        const welcomePrompt = [
+          ...(existingHistory || []),
+          { role: 'user' as const, content: "I'm back! Please give me a brief welcome back message and remind me where we left off, then continue the interview." },
+        ];
         const res = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            messages: welcomePrompt,
-            subject: subject,
-            difficulty: difficulty,
-            userId: userId
-          }),
+          body: JSON.stringify({ messages: welcomePrompt, subject, difficulty, userId }),
         });
         const chatData = await res.json();
         if (chatData.text) {
-          const updatedHistory = [
+          const updatedHistory: Message[] = [
             ...(existingHistory || []),
-            { role: 'assistant' as const, content: chatData.text }
+            { role: 'assistant', content: chatData.text },
           ];
           setChatHistory(updatedHistory);
-          await supabase.from('interviews').update({ chat_history: updatedHistory }).eq('id', interviewId);
+          // Force-write the welcome-back message immediately.
+          await saveHistory(updatedHistory, true);
         }
       } catch (err) {
         console.error("Welcome Back Error:", err);
@@ -155,16 +208,18 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
     };
 
     if (interviewId) startSession();
-  }, [interviewId]);
+  }, [interviewId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Auto-scroll
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
     }
   }, [chatHistory, isThinking]);
 
+  // ── Send message ─────────────────────────────────────────────────────────
   const handleSendMessage = async () => {
-    if (!userInput.trim() || isThinking) return;
+    if (!userInput.trim() || isThinking || isInputDisabled) return;
 
     const userMsg: Message = { role: 'user', content: userInput };
     const updatedHistory = [...chatHistory, userMsg];
@@ -181,15 +236,16 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
           messages: updatedHistory,
           subject: interview?.subject,
           difficulty: interview?.difficulty,
-          userId: currentUserId
+          userId: currentUserId,
         }),
       });
 
       const data = await res.json();
       if (data.text) {
-        const newHistory = [...updatedHistory, { role: 'assistant' as const, content: data.text }];
+        const newHistory: Message[] = [...updatedHistory, { role: 'assistant', content: data.text }];
         setChatHistory(newHistory);
-        await supabase.from('interviews').update({ chat_history: newHistory }).eq('id', interviewId);
+        // ── FIX 2 applied here: batched write, not forced ──
+        await saveHistory(newHistory);
       }
     } catch (err) {
       console.error("Chat Error:", err);
@@ -198,12 +254,15 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
     }
   };
 
+  // ── End interview ────────────────────────────────────────────────────────
   const handleEndInterview = async () => {
     if (!canEndInterview) return;
+
+    // Disable input immediately so no new messages can be sent during evaluation.
+    setIsInputDisabled(true);
     setIsEvaluating(true);
+
     try {
-      // If the last message is from assistant (unanswered question),
-      // trim it so evaluation is only on answered Q&A pairs
       const lastMsg = chatHistory[chatHistory.length - 1];
       const historyForEvaluation = lastMsg?.role === 'assistant'
         ? chatHistory.slice(0, -1)
@@ -212,10 +271,7 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
       const response = await fetch('/api/evaluate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          history: historyForEvaluation, 
-          subject: interview?.subject 
-        }),
+        body: JSON.stringify({ history: historyForEvaluation, subject: interview?.subject }),
       });
 
       const data = await response.json();
@@ -224,21 +280,28 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
         score: data.score ?? 0,
         summary: data.summary || "No summary generated.",
         strengths: data.strengths || [],
-        improvements: data.improvements || []
+        improvements: data.improvements || [],
       };
 
       setReport(finalReport);
-      await supabase.from('interviews')
+
+      // Force-write the final state plus the report in one go.
+      await supabase
+        .from('interviews')
         .update({ report: finalReport, chat_history: chatHistory })
         .eq('id', interviewId);
+
+      // Reset dirty counter since we just did a full write.
+      messagesSinceLastWrite.current = 0;
     } catch (e) {
       console.error("Evaluation Error:", e);
+      setIsInputDisabled(false); // Re-enable input if evaluation fails
     } finally {
       setIsEvaluating(false);
     }
   };
 
-  // --- PDF DOWNLOAD ---
+  // ── PDF download (unchanged) ─────────────────────────────────────────────
   const handleDownloadPDF = () => {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
@@ -246,35 +309,29 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
     const maxWidth = pageWidth - margin * 2;
     let y = 20;
 
-    const addText = (text: string, fontSize: number, isBold: boolean = false, color: [number, number, number] = [0, 0, 0]) => {
+    const addText = (text: string, fontSize: number, isBold = false, color: [number, number, number] = [0, 0, 0]) => {
       doc.setFontSize(fontSize);
       doc.setFont('helvetica', isBold ? 'bold' : 'normal');
       doc.setTextColor(...color);
       const lines = doc.splitTextToSize(text, maxWidth);
       lines.forEach((line: string) => {
-        if (y > 270) {
-          doc.addPage();
-          y = 20;
-        }
+        if (y > 270) { doc.addPage(); y = 20; }
         doc.text(line, margin, y);
         y += fontSize * 0.5;
       });
       y += 3;
     };
 
-    // Header
     addText('AI INTERVIEWER', 20, true, [79, 70, 229]);
     addText('Interview Chat Transcript', 12, false, [100, 100, 100]);
     addText(`Subject: ${interview?.subject} | Difficulty: ${interview?.difficulty}`, 11, false, [100, 100, 100]);
     addText(`Date: ${new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`, 11, false, [100, 100, 100]);
 
-    // Divider
     y += 5;
     doc.setDrawColor(200, 200, 200);
     doc.line(margin, y, pageWidth - margin, y);
     y += 10;
 
-    // Report Summary if exists
     if (report) {
       addText(`FINAL SCORE: ${report.score}%`, 16, true, [79, 70, 229]);
       addText(report.summary, 11, false, [60, 60, 60]);
@@ -283,16 +340,15 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
       y += 10;
     }
 
-    // Chat transcript
     addText('CHAT TRANSCRIPT', 13, true, [40, 40, 40]);
     y += 3;
 
-    chatHistory.forEach((msg, index) => {
+    chatHistory.forEach((msg) => {
       if (msg.role === 'assistant') {
-        addText(`Interviewer:`, 10, true, [79, 70, 229]);
+        addText('Interviewer:', 10, true, [79, 70, 229]);
         addText(msg.content, 10, false, [30, 30, 30]);
       } else if (msg.role === 'user') {
-        addText(`Candidate:`, 10, true, [16, 185, 129]);
+        addText('Candidate:', 10, true, [16, 185, 129]);
         addText(msg.content, 10, false, [30, 30, 30]);
       }
       y += 2;
@@ -315,31 +371,17 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
           const match = /language-(\w+)/.exec(className || '');
           const language = match ? match[1] : 'python';
           const isBlock = !!match || String(children).includes('\n');
-
           return isBlock ? (
             <div className="my-3 rounded-xl overflow-hidden border border-white/5">
               <div className="flex items-center px-4 py-2 bg-[#1a1a2e] border-b border-white/5">
-                <span className="text-[10px] font-black uppercase tracking-widest text-white/30">
-                  {language}
-                </span>
+                <span className="text-[10px] font-black uppercase tracking-widest text-white/30">{language}</span>
               </div>
-              <SyntaxHighlighter
-                language={language}
-                style={atomOneDark}
-                customStyle={{
-                  margin: 0,
-                  padding: '1rem',
-                  background: '#1e1e2e',
-                  fontSize: '0.85rem',
-                }}
-              >
+              <SyntaxHighlighter language={language} style={atomOneDark} customStyle={{ margin: 0, padding: '1rem', background: '#1e1e2e', fontSize: '0.85rem' }}>
                 {String(children).replace(/\n$/, '')}
               </SyntaxHighlighter>
             </div>
           ) : (
-            <code className="text-indigo-300 font-mono text-sm bg-black/30 px-1 rounded" {...props}>
-              {children}
-            </code>
+            <code className="text-indigo-300 font-mono text-sm bg-black/30 px-1 rounded" {...props}>{children}</code>
           );
         },
       }}
@@ -368,7 +410,6 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
             </h1>
           </div>
 
-          {/* END & GRADE BUTTON WITH PROGRESS */}
           <div className="flex items-center gap-3">
             {!canEndInterview && (
               <div className="text-right">
@@ -385,10 +426,10 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
             )}
             <button
               onClick={handleEndInterview}
-              disabled={!canEndInterview}
+              disabled={!canEndInterview || isInputDisabled}
               title={!canEndInterview ? `${minQuestionsRequired - questionsAsked} more unique questions needed` : 'End interview and get your grade'}
               className={`px-8 py-3 rounded-full font-black uppercase text-[10px] tracking-widest transition-all shadow-xl ${
-                canEndInterview
+                canEndInterview && !isInputDisabled
                   ? 'bg-white text-black hover:bg-red-500 hover:text-white cursor-pointer'
                   : 'bg-white/10 text-white/30 cursor-not-allowed'
               }`}
@@ -432,13 +473,19 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
                   handleSendMessage();
                 }
               }}
-              placeholder="Provide your solution or explanation..."
+              disabled={isInputDisabled}
+              placeholder={isInputDisabled ? "Interview ended." : "Provide your solution or explanation..."}
               rows={1}
-              className="flex-1 bg-[#1a1a2e] text-white border-none rounded-[1.5rem] px-8 py-4 font-medium focus:ring-2 focus:ring-indigo-600 outline-none transition-all placeholder:text-white/10 resize-none min-h-[60px] max-h-[150px] overflow-y-auto"
+              className={`flex-1 bg-[#1a1a2e] text-white border-none rounded-[1.5rem] px-8 py-4 font-medium focus:ring-2 focus:ring-indigo-600 outline-none transition-all placeholder:text-white/10 resize-none min-h-[60px] max-h-[150px] overflow-y-auto ${
+                isInputDisabled ? 'opacity-40 cursor-not-allowed' : ''
+              }`}
             />
             <button
               onClick={handleSendMessage}
-              className="bg-indigo-600 text-white px-10 h-[60px] rounded-[1.5rem] font-black uppercase text-xs tracking-widest hover:bg-white hover:text-indigo-600 transition-all active:scale-95"
+              disabled={isInputDisabled}
+              className={`bg-indigo-600 text-white px-10 h-[60px] rounded-[1.5rem] font-black uppercase text-xs tracking-widest transition-all active:scale-95 ${
+                isInputDisabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white hover:text-indigo-600'
+              }`}
             >
               Send
             </button>
@@ -450,7 +497,6 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
       {(isEvaluating || report) && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-3xl z-[100] flex items-start justify-center p-4 overflow-y-auto pt-8 pb-20">
           <div className="max-w-3xl w-full my-auto">
-
             {isEvaluating ? (
               <div className="bg-white rounded-[3rem] p-16 text-center shadow-2xl">
                 <div className="w-16 h-16 border-t-4 border-indigo-600 border-solid rounded-full animate-spin mx-auto mb-8" />
@@ -459,8 +505,6 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
               </div>
             ) : report && scoreColors && (
               <div className="space-y-4 animate-in fade-in duration-500">
-
-                {/* TOP CARD — Score + Meta */}
                 <div className="bg-white rounded-[2.5rem] p-8 shadow-2xl">
                   <div className="flex items-center justify-between mb-6">
                     <div>
@@ -481,33 +525,22 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
                       </span>
                     </div>
                   </div>
-
-                  {/* Score Bar */}
                   <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
-                    <div
-                      className={`h-2.5 rounded-full transition-all duration-1000 ${scoreColors.bg}`}
-                      style={{ width: `${report.score}%` }}
-                    />
+                    <div className={`h-2.5 rounded-full transition-all duration-1000 ${scoreColors.bg}`} style={{ width: `${report.score}%` }} />
                   </div>
                   <div className="flex justify-between text-[9px] font-black uppercase tracking-widest text-gray-300 mt-1.5">
-                    <span>0</span>
-                    <span>50</span>
-                    <span>100</span>
+                    <span>0</span><span>50</span><span>100</span>
                   </div>
                 </div>
 
-                {/* SUMMARY CARD */}
                 <div className="bg-white rounded-[2.5rem] p-8 shadow-xl">
                   <div className="flex items-center gap-3 mb-4">
                     <div className="w-8 h-8 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600 font-black text-sm">📋</div>
-                    <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-500">Interviewer's Assessment</h3>
+                    <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-500">Interviewer&apos;s Assessment</h3>
                   </div>
-                  <p className="text-gray-700 leading-relaxed text-base font-medium border-l-4 border-indigo-200 pl-4 italic">
-                    {report.summary}
-                  </p>
+                  <p className="text-gray-700 leading-relaxed text-base font-medium border-l-4 border-indigo-200 pl-4 italic">{report.summary}</p>
                 </div>
 
-                {/* STRENGTHS + IMPROVEMENTS */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="bg-white rounded-[2.5rem] p-8 shadow-xl">
                     <div className="flex items-center gap-3 mb-5">
@@ -523,7 +556,6 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
                       )) : <p className="text-gray-300 text-xs">No strengths recorded.</p>}
                     </div>
                   </div>
-
                   <div className="bg-white rounded-[2.5rem] p-8 shadow-xl">
                     <div className="flex items-center gap-3 mb-5">
                       <div className="w-8 h-8 rounded-xl bg-amber-100 flex items-center justify-center text-lg">🎯</div>
@@ -540,18 +572,13 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
                   </div>
                 </div>
 
-                {/* STATS ROW */}
                 <div className="grid grid-cols-3 gap-4">
                   <div className="bg-white rounded-[2rem] p-6 shadow-xl text-center">
-                    <p className="text-3xl font-black text-gray-900">
-                      {chatHistory.filter(m => m.role === 'user').length}
-                    </p>
+                    <p className="text-3xl font-black text-gray-900">{chatHistory.filter(m => m.role === 'user').length}</p>
                     <p className="text-[9px] font-black uppercase tracking-widest text-gray-400 mt-1">Responses Given</p>
                   </div>
                   <div className="bg-white rounded-[2rem] p-6 shadow-xl text-center">
-                    <p className="text-3xl font-black text-gray-900">
-                      {questionsAsked}
-                    </p>
+                    <p className="text-3xl font-black text-gray-900">{questionsAsked}</p>
                     <p className="text-[9px] font-black uppercase tracking-widest text-gray-400 mt-1">Unique Questions</p>
                   </div>
                   <div className="bg-white rounded-[2rem] p-6 shadow-xl text-center">
@@ -560,22 +587,14 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
                   </div>
                 </div>
 
-                {/* ACTION BUTTONS */}
                 <div className="bg-white rounded-[2.5rem] p-6 shadow-xl flex flex-col gap-3">
-                  <button
-                    onClick={() => router.push('/dashboard/review')}
-                    className="w-full bg-gray-900 text-white py-5 rounded-[1.5rem] font-black uppercase text-xs tracking-[0.2em] hover:bg-indigo-600 transition-all shadow-xl"
-                  >
+                  <button onClick={() => router.push('/dashboard/review')} className="w-full bg-gray-900 text-white py-5 rounded-[1.5rem] font-black uppercase text-xs tracking-[0.2em] hover:bg-indigo-600 transition-all shadow-xl">
                     💾 Save & Return to Archive
                   </button>
-                  <button
-                    onClick={handleDownloadPDF}
-                    className="w-full bg-indigo-50 text-indigo-700 py-5 rounded-[1.5rem] font-black uppercase text-xs tracking-[0.2em] hover:bg-indigo-100 transition-all border border-indigo-100"
-                  >
+                  <button onClick={handleDownloadPDF} className="w-full bg-indigo-50 text-indigo-700 py-5 rounded-[1.5rem] font-black uppercase text-xs tracking-[0.2em] hover:bg-indigo-100 transition-all border border-indigo-100">
                     📄 Download Chat as PDF
                   </button>
                 </div>
-
               </div>
             )}
           </div>
