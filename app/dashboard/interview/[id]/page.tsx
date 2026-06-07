@@ -130,10 +130,12 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
   });
 
   // Only count questions that actually received a user response.
-  // This prevents the last unanswered question from inflating the counter
-  // when the user clicks "End & Grade" without answering it.
+  // Uses content-based lookup instead of reference-based indexOf to avoid
+  // React state re-renders breaking object reference equality.
   const questionsAsked = uniqueQuestions.filter((msg) => {
-    const msgIndex = chatHistory.indexOf(msg);
+    const msgIndex = chatHistory.findIndex(
+      (m) => m.role === msg.role && m.content === msg.content
+    );
     const nextMsg = chatHistory[msgIndex + 1];
     return nextMsg?.role === 'user';
   }).length;
