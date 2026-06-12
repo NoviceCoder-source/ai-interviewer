@@ -1,263 +1,178 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '../../lib/supabase';
+import { supabase } from '../../../lib/supabase'; // Cleaned up relative path to match app/admin/dashboard structure
 
-interface Student {
+type Student = {
   id: string;
   full_name: string;
   email: string;
   contact: string;
-  status: string;
-  created_at: string;
-}
+  status: 'pending' | 'approved' | 'rejected';
+  updated_at: string;
+};
 
 type FilterStatus = 'pending' | 'approved' | 'rejected';
 
 export default function AdminDashboard() {
   const router = useRouter();
+  const [activeTab, setActiveTab] = useState<FilterStatus>('pending');
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<FilterStatus>('pending');
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [adminName, setAdminName] = useState('');
+  const [adminName, setAdminName] = useState('Admin');
 
   useEffect(() => {
-    const init = async () => {
+    // Verify admin session privileges on mount
+    const checkAdmin = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        router.replace('/admin');
+        router.push('/');
         return;
       }
 
       const { data: profile } = await supabase
         .from('profiles')
-        .select('role, full_name')
+        .select('full_name, role')
         .eq('id', user.id)
         .single();
 
-      if (profile?.role !== 'admin') {
-        router.replace('/admin');
+      if (!profile || profile.role !== 'admin') {
+        router.push('/');
         return;
       }
-
-      setAdminName(profile?.full_name || user.email || 'Admin');
-      await fetchStudents('pending');
+      if (profile.full_name) setAdminName(profile.full_name);
     };
 
-    init();
+    checkAdmin();
   }, [router]);
 
+  // ── Corrected Pipeline Fetch Function ──────────────────────────────────────
   const fetchStudents = async (status: FilterStatus) => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('id, full_name, email, contact, status, created_at')
-      .eq('status', status)
-      .eq('role', 'student')
-      .order('created_at', { ascending: false });
-
-    if (!error && data) setStudents(data as Student[]);
-    setLoading(false);
-  };
-
-  const handleFilter = (status: FilterStatus) => {
-    setFilter(status);
-    fetchStudents(status);
-  };
-
-  const handleAction = async (
-    studentId: string,
-    studentEmail: string,
-    action: 'approve' | 'reject' | 'revoke'
-  ) => {
-    if (action === 'reject' || action === 'revoke') {
-      const confirmed = window.confirm(
-        action === 'revoke'
-          ? 'Are you sure you want to revoke this student\'s access?'
-          : 'Are you sure you want to reject this student?'
-      );
-      if (!confirmed) return;
-    }
-
-    setActionLoading(studentId);
-
     try {
-      const res = await fetch('/api/admin-action', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ studentId, studentEmail, action }),
-      });
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, contact, status, updated_at')
+        .eq('status', status)
+        .eq('role', 'student')
+        .order('updated_at', { ascending: false }); // 👈 FIXED: Sorts dynamically by real column
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        alert('Action failed: ' + data.error);
-        return;
+      if (error) {
+        console.error('Supabase fetch validation failure:', error.message);
+      } else {
+        setStudents(data || []);
       }
-
-      if (data.warning) {
-        alert('⚠️ ' + data.warning);
-      } else if (action === 'approve') {
-        alert(`✅ Student approved! A setup link has been sent to ${studentEmail}`);
-      }
-
-      // Remove from current list
-      setStudents(prev => prev.filter(s => s.id !== studentId));
-
     } catch (err) {
-      console.error('Action error:', err);
-      alert('Something went wrong. Please try again.');
+      console.error('Unexpected dashboard fetch exception:', err);
     } finally {
-      setActionLoading(null);
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchStudents(activeTab);
+  }, [activeTab]);
+
+  const handleStatusChange = async (id: string, newStatus: 'approved' | 'rejected') => {
+    const { error } = await supabase
+      .from('profiles')
+      .update({ status: newStatus })
+      .eq('id', id);
+
+    if (error) {
+      alert(`Failed to update status: ${error.message}`);
+    } else {
+      // Re-fetch the current active view lists seamlessly
+      fetchStudents(activeTab);
     }
   };
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
-    router.replace('/admin');
+    router.push('/');
   };
 
   return (
-    <div className="min-h-screen bg-gray-950 p-6 font-sans">
-      <div className="max-w-5xl mx-auto">
+    <div className="min-h-screen bg-[#0B132B] text-white p-8">
+      {/* Top Identity bar */}
+      <div className="flex justify-between items-center mb-10 max-w-6xl mx-auto">
+        <div>
+          <h1 className="text-3xl font-extrabold tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400">
+            🔐 BIGNALYTICS <span className="text-indigo-400 font-medium text-2xl">ADMIN</span>
+          </h1>
+          <p className="text-gray-400 text-xs mt-1">Logged in as <span className="text-white font-semibold">{adminName}</span></p>
+        </div>
+        <button
+          onClick={handleSignOut}
+          className="bg-white/10 hover:bg-white/20 border border-white/10 px-6 py-2.5 rounded-xl text-sm font-bold tracking-wide transition-all"
+        >
+          SIGN OUT
+        </button>
+      </div>
 
-        {/* HEADER */}
-        <header className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-2xl font-black text-white uppercase tracking-tight">
-              🔐 Bignalytics <span className="text-indigo-400">Admin</span>
-            </h1>
-            <p className="text-gray-500 text-xs font-medium mt-1">
-              Logged in as {adminName}
-            </p>
-          </div>
-          <button
-            onClick={handleSignOut}
-            className="px-6 py-2 bg-gray-800 text-gray-300 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all"
-          >
-            Sign Out
-          </button>
-        </header>
-
-        {/* FILTER TABS */}
-        <div className="flex gap-3 mb-6">
-          {(['pending', 'approved', 'rejected'] as FilterStatus[]).map((status) => (
+      <div className="max-w-6xl mx-auto">
+        {/* State Selection Navigation Tabs */}
+        <div className="flex space-x-4 mb-6">
+          {(['pending', 'approved', 'rejected'] as FilterStatus[]).map((tab) => (
             <button
-              key={status}
-              onClick={() => handleFilter(status)}
-              className={`px-6 py-3 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${
-                filter === status
-                  ? status === 'pending'
-                    ? 'bg-amber-500 text-white'
-                    : status === 'approved'
-                    ? 'bg-emerald-500 text-white'
-                    : 'bg-red-500 text-white'
-                  : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-6 py-3 rounded-xl font-bold text-sm tracking-wider uppercase transition-all ${
+                activeTab === tab
+                  ? 'bg-amber-500 text-[#0B132B] shadow-lg shadow-amber-500/20'
+                  : 'bg-white/5 text-gray-400 hover:bg-white/10'
               }`}
             >
-              {status}
-              {filter === status && (
-                <span className="ml-2 bg-white/20 px-2 py-0.5 rounded-full">
-                  {students.length}
-                </span>
-              )}
+              {tab}
             </button>
           ))}
         </div>
 
-        {/* STUDENT LIST */}
-        {loading ? (
-          <div className="flex flex-col items-center justify-center py-20">
-            <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4" />
-            <p className="text-gray-500 text-xs font-black uppercase tracking-widest">Loading students...</p>
-          </div>
-        ) : students.length === 0 ? (
-          <div className="bg-gray-900 rounded-2xl p-16 text-center border border-gray-800">
-            <div className="text-4xl mb-4">
-              {filter === 'pending' ? '📭' : filter === 'approved' ? '✅' : '❌'}
+        {/* Dynamic Card Dashboard Workspace */}
+        <div className="bg-white/[0.02] backdrop-blur-md border border-white/5 rounded-2xl p-8 min-h-[350px] flex flex-col justify-center">
+          {loading ? (
+            <div className="text-center text-gray-400 font-medium">Loading records...</div>
+          ) : students.length === 0 ? (
+            <div className="text-center space-y-3">
+              <div className="text-4xl">📬</div>
+              <h3 className="text-gray-400 font-bold uppercase tracking-widest text-sm">No {activeTab} Students</h3>
             </div>
-            <p className="text-gray-400 font-bold text-sm uppercase tracking-widest">
-              No {filter} students
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {students.map((student) => (
-              <div
-                key={student.id}
-                className="bg-gray-900 rounded-2xl p-6 border border-gray-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-4"
-              >
-                {/* Student Info */}
-                <div className="flex-1">
-                  <h3 className="text-white font-black text-lg">
-                    {student.full_name || 'No name provided'}
-                  </h3>
-                  <div className="flex flex-wrap gap-4 mt-2">
-                    <p className="text-gray-400 text-sm">📧 {student.email}</p>
-                    <p className="text-gray-400 text-sm">📱 {student.contact || 'No contact provided'}</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 align-top self-start w-full">
+              {students.map((student) => (
+                <div
+                  key={student.id}
+                  className="bg-white/5 border border-white/10 rounded-xl p-5 flex flex-col justify-between hover:border-white/20 transition-all shadow-md"
+                >
+                  <div>
+                    <h3 className="text-lg font-bold text-white mb-1">{student.full_name}</h3>
+                    <p className="text-gray-400 text-xs font-medium mb-3">{student.email}</p>
+                    <div className="text-xs text-gray-300 space-y-1 bg-black/20 p-3 rounded-lg border border-white/5">
+                      <div>📞 <span className="font-semibold">{student.contact || 'N/A'}</span></div>
+                    </div>
                   </div>
-                  <p className="text-gray-600 text-xs mt-2">
-                    Registered on {new Date(student.created_at).toLocaleDateString(undefined, {
-                      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
-                    })}
-                  </p>
+
+                  {activeTab === 'pending' && (
+                    <div className="flex space-x-3 mt-5">
+                      <button
+                        onClick={() => handleStatusChange(student.id, 'approved')}
+                        className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 rounded-lg text-xs tracking-wider transition-all"
+                      >
+                        APPROVE
+                      </button>
+                      <button
+                        onClick={() => handleStatusChange(student.id, 'rejected')}
+                        className="flex-1 bg-red-500/20 hover:bg-red-500 text-red-200 font-bold py-2 rounded-lg text-xs tracking-wider border border-red-500/30 transition-all"
+                      >
+                        REJECT
+                      </button>
+                    </div>
+                  )}
                 </div>
-
-                {/* Action Buttons */}
-                {filter === 'pending' && (
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => handleAction(student.id, student.email, 'approve')}
-                      disabled={actionLoading === student.id}
-                      className="px-6 py-3 bg-emerald-500 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-emerald-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {actionLoading === student.id ? '...' : '✅ Approve'}
-                    </button>
-                    <button
-                      onClick={() => handleAction(student.id, student.email, 'reject')}
-                      disabled={actionLoading === student.id}
-                      className="px-6 py-3 bg-red-500/20 text-red-400 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-red-500/30"
-                    >
-                      {actionLoading === student.id ? '...' : '❌ Reject'}
-                    </button>
-                  </div>
-                )}
-
-                {filter === 'approved' && (
-                  <div className="flex gap-3">
-                    <span className="px-4 py-2 bg-emerald-500/20 text-emerald-400 rounded-xl font-black text-xs uppercase tracking-widest border border-emerald-500/30">
-                      ✅ Approved
-                    </span>
-                    <button
-                      onClick={() => handleAction(student.id, student.email, 'revoke')}
-                      disabled={actionLoading === student.id}
-                      className="px-4 py-2 bg-red-500/20 text-red-400 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all disabled:opacity-50 border border-red-500/30"
-                    >
-                      {actionLoading === student.id ? '...' : 'Revoke'}
-                    </button>
-                  </div>
-                )}
-
-                {filter === 'rejected' && (
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => handleAction(student.id, student.email, 'approve')}
-                      disabled={actionLoading === student.id}
-                      className="px-4 py-2 bg-emerald-500/20 text-emerald-400 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-emerald-500 hover:text-white transition-all disabled:opacity-50 border border-emerald-500/30"
-                    >
-                      {actionLoading === student.id ? '...' : 'Approve'}
-                    </button>
-                    <span className="px-4 py-2 bg-red-500/20 text-red-400 rounded-xl font-black text-xs uppercase tracking-widest border border-red-500/30">
-                      ❌ Rejected
-                    </span>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
