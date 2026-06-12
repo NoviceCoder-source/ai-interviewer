@@ -9,13 +9,13 @@ export default function Home() {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>('login');
 
-  // Login state
+  // Login states
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
 
-  // Register state
+  // Register states
   const [fullName, setFullName] = useState('');
   const [contact, setContact] = useState('');
   const [email, setEmail] = useState('');
@@ -23,14 +23,13 @@ export default function Home() {
   const [registerLoading, setRegisterLoading] = useState(false);
   const [registerSuccess, setRegisterSuccess] = useState(false);
 
-  // ── Login handler ──────────────────────────────────────────────────────────
+  // ── Login Handler ──────────────────────────────────────────────────────────
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
     setLoginLoading(true);
 
     try {
-      // Step 1: Look up email by username in profiles table
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('email, status, role')
@@ -42,7 +41,6 @@ export default function Home() {
         return;
       }
 
-      // Step 2: Check account status before attempting login
       if (profile.status === 'pending') {
         setLoginError('Your account is still pending approval.');
         return;
@@ -53,7 +51,6 @@ export default function Home() {
         return;
       }
 
-      // Step 3: Sign in with email + password via Supabase auth
       const { error: signInError } = await supabase.auth.signInWithPassword({
         email: profile.email,
         password,
@@ -64,7 +61,6 @@ export default function Home() {
         return;
       }
 
-      // Step 4: Redirect based on role
       if (profile.role === 'admin') {
         router.push('/admin/dashboard');
       } else {
@@ -72,76 +68,43 @@ export default function Home() {
       }
 
     } catch (err) {
-      console.error('Login error:', err);
+      console.error('Login processing crash:', err);
       setLoginError('Something went wrong. Please try again.');
     } finally {
       setLoginLoading(false);
     }
   };
 
-  // ── Register handler ───────────────────────────────────────────────────────
+  // ── Safe Server-Side Register Handler ──────────────────────────────────────
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setRegisterError('');
     setRegisterLoading(true);
 
     try {
-      // Step 1: Check if email already exists in profiles
-      const { data: existing } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('email', email.trim().toLowerCase())
-        .single();
-
-      if (existing) {
-        setRegisterError('This email is already registered.');
-        return;
-      }
-
-      // Step 2: Create a Supabase auth account with a temporary password
-      // The student will set their real password when they get approved
-      const tempPassword = crypto.randomUUID();
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: email.trim().toLowerCase(),
-        password: tempPassword,
+      const res = await fetch('/api/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fullName, contact, email }),
       });
 
-      if (authError || !authData.user) {
-        setRegisterError('Failed to create account. Please try again.');
+      const data = await res.json();
+
+      if (!res.ok) {
+        setRegisterError(data.error || 'Registration failed.');
         return;
       }
-
-      // Step 3: Save their registration details to profiles
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .upsert({
-          id: authData.user.id,
-          email: email.trim().toLowerCase(),
-          full_name: fullName.trim(),
-          contact: contact.trim(),
-          status: 'pending',
-          role: 'student',
-        });
-
-      if (profileError) {
-        setRegisterError('Failed to save your details. Please try again.');
-        return;
-      }
-
-      // Step 4: Sign out immediately — they can't access anything until approved
-      await supabase.auth.signOut();
 
       setRegisterSuccess(true);
 
     } catch (err) {
-      console.error('Register error:', err);
+      console.error('Registration post error:', err);
       setRegisterError('Something went wrong. Please try again.');
     } finally {
       setRegisterLoading(false);
     }
   };
 
-  // ── Registration success screen ────────────────────────────────────────────
   if (registerSuccess) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 p-4">
@@ -167,21 +130,17 @@ export default function Home() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 p-4">
       <div className="bg-white/10 backdrop-blur-lg p-10 rounded-2xl shadow-2xl border border-white/20 w-full max-w-sm">
 
-        {/* Header */}
         <div className="text-center mb-8">
           <div className="text-5xl mb-3">🎓</div>
           <h1 className="text-3xl font-extrabold text-white">Bignalytics</h1>
           <p className="text-indigo-100 text-sm font-medium mt-1">AI Interview Practice Platform</p>
         </div>
 
-        {/* Mode Toggle */}
         <div className="flex rounded-xl border border-white/20 overflow-hidden mb-8">
           <button
             onClick={() => { setMode('login'); setLoginError(''); }}
             className={`flex-1 py-3 text-sm font-bold transition-all ${
-              mode === 'login'
-                ? 'bg-white text-indigo-600'
-                : 'bg-transparent text-white hover:bg-white/10'
+              mode === 'login' ? 'bg-white text-indigo-600' : 'bg-transparent text-white hover:bg-white/10'
             }`}
           >
             Login
@@ -189,16 +148,13 @@ export default function Home() {
           <button
             onClick={() => { setMode('register'); setRegisterError(''); }}
             className={`flex-1 py-3 text-sm font-bold transition-all ${
-              mode === 'register'
-                ? 'bg-white text-indigo-600'
-                : 'bg-transparent text-white hover:bg-white/10'
+              mode === 'register' ? 'bg-white text-indigo-600' : 'bg-transparent text-white hover:bg-white/10'
             }`}
           >
             Register
           </button>
         </div>
 
-        {/* LOGIN FORM */}
         {mode === 'login' && (
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
@@ -237,21 +193,9 @@ export default function Home() {
             >
               {loginLoading ? 'Logging in...' : 'Login'}
             </button>
-
-            <p className="text-center text-white/60 text-xs">
-              New student?{' '}
-              <button
-                type="button"
-                onClick={() => setMode('register')}
-                className="text-white font-bold underline"
-              >
-                Register here
-              </button>
-            </p>
           </form>
         )}
 
-        {/* REGISTER FORM */}
         {mode === 'register' && (
           <form onSubmit={handleRegister} className="space-y-4">
             <div>
@@ -301,17 +245,6 @@ export default function Home() {
             >
               {registerLoading ? 'Submitting...' : 'Submit Registration'}
             </button>
-
-            <p className="text-center text-white/60 text-xs">
-              Already have an account?{' '}
-              <button
-                type="button"
-                onClick={() => setMode('login')}
-                className="text-white font-bold underline"
-              >
-                Login here
-              </button>
-            </p>
           </form>
         )}
 
