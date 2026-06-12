@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '../../../lib/supabase'; // Cleaned up relative path to match app/admin/dashboard structure
+import { supabase } from '../../lib/supabase'; // 👈 Swapped to your working relative path
 
 type Student = {
   id: string;
@@ -22,7 +22,6 @@ export default function AdminDashboard() {
   const [adminName, setAdminName] = useState('Admin');
 
   useEffect(() => {
-    // Verify admin session privileges on mount
     const checkAdmin = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
@@ -46,7 +45,6 @@ export default function AdminDashboard() {
     checkAdmin();
   }, [router]);
 
-  // ── Corrected Pipeline Fetch Function ──────────────────────────────────────
   const fetchStudents = async (status: FilterStatus) => {
     setLoading(true);
     try {
@@ -55,10 +53,10 @@ export default function AdminDashboard() {
         .select('id, full_name, email, contact, status, updated_at')
         .eq('status', status)
         .eq('role', 'student')
-        .order('updated_at', { ascending: false }); // 👈 FIXED: Sorts dynamically by real column
+        .order('updated_at', { ascending: false }); // Sorted by your real database column
 
       if (error) {
-        console.error('Supabase fetch validation failure:', error.message);
+        console.error('Fetch error:', error.message);
       } else {
         setStudents(data || []);
       }
@@ -82,7 +80,6 @@ export default function AdminDashboard() {
     if (error) {
       alert(`Failed to update status: ${error.message}`);
     } else {
-      // Re-fetch the current active view lists seamlessly
       fetchStudents(activeTab);
     }
   };
@@ -94,7 +91,6 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-[#0B132B] text-white p-8">
-      {/* Top Identity bar */}
       <div className="flex justify-between items-center mb-10 max-w-6xl mx-auto">
         <div>
           <h1 className="text-3xl font-extrabold tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400">
@@ -111,7 +107,6 @@ export default function AdminDashboard() {
       </div>
 
       <div className="max-w-6xl mx-auto">
-        {/* State Selection Navigation Tabs */}
         <div className="flex space-x-4 mb-6">
           {(['pending', 'approved', 'rejected'] as FilterStatus[]).map((tab) => (
             <button
@@ -128,7 +123,6 @@ export default function AdminDashboard() {
           ))}
         </div>
 
-        {/* Dynamic Card Dashboard Workspace */}
         <div className="bg-white/[0.02] backdrop-blur-md border border-white/5 rounded-2xl p-8 min-h-[350px] flex flex-col justify-center">
           {loading ? (
             <div className="text-center text-gray-400 font-medium">Loading records...</div>
