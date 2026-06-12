@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '../../lib/supabase'; // 👈 Swapped to your working relative path
+import { supabase } from '../../lib/supabase'; // Confirmed relative path structure
 
 type Student = {
   id: string;
@@ -53,7 +53,7 @@ export default function AdminDashboard() {
         .select('id, full_name, email, contact, status, updated_at')
         .eq('status', status)
         .eq('role', 'student')
-        .order('updated_at', { ascending: false }); // Sorted by your real database column
+        .order('updated_at', { ascending: false });
 
       if (error) {
         console.error('Fetch error:', error.message);
@@ -71,16 +71,23 @@ export default function AdminDashboard() {
     fetchStudents(activeTab);
   }, [activeTab]);
 
+  // ── Optimistic UI Update Fix ──────────────────────────────────────────────
   const handleStatusChange = async (id: string, newStatus: 'approved' | 'rejected') => {
-    const { error } = await supabase
-      .from('profiles')
-      .update({ status: newStatus })
-      .eq('id', id);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ status: newStatus })
+        .eq('id', id);
 
-    if (error) {
-      alert(`Failed to update status: ${error.message}`);
-    } else {
-      fetchStudents(activeTab);
+      if (error) {
+        alert(`Failed to update status: ${error.message}`);
+      } else {
+        // 🚀 FIXED: Remove the student row from the state immediately 
+        // This removes dependency on immediate server sync timing loops
+        setStudents((prevStudents) => prevStudents.filter((student) => student.id !== id));
+      }
+    } catch (err) {
+      console.error('Error during status transformation update:', err);
     }
   };
 
@@ -91,6 +98,7 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-[#0B132B] text-white p-8">
+      {/* Top Header Information Panel */}
       <div className="flex justify-between items-center mb-10 max-w-6xl mx-auto">
         <div>
           <h1 className="text-3xl font-extrabold tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400">
@@ -107,6 +115,7 @@ export default function AdminDashboard() {
       </div>
 
       <div className="max-w-6xl mx-auto">
+        {/* Navigation Filters */}
         <div className="flex space-x-4 mb-6">
           {(['pending', 'approved', 'rejected'] as FilterStatus[]).map((tab) => (
             <button
@@ -123,6 +132,7 @@ export default function AdminDashboard() {
           ))}
         </div>
 
+        {/* Dynamic Card Container Board */}
         <div className="bg-white/[0.02] backdrop-blur-md border border-white/5 rounded-2xl p-8 min-h-[350px] flex flex-col justify-center">
           {loading ? (
             <div className="text-center text-gray-400 font-medium">Loading records...</div>
