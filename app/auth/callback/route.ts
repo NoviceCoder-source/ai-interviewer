@@ -1,35 +1,14 @@
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
+// The Supabase recovery email puts the token in the URL hash (#access_token=...)
+// Hash fragments are NEVER sent to the server — they only exist in the browser.
+// So this server route does nothing except redirect to a client-side page
+// that can read window.location.hash and exchange the token for a session.
+
 export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url);
-  const code = searchParams.get('code');
+  const { origin, search } = new URL(request.url);
 
-  if (code) {
-    const cookieStore = await cookies();
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) { return cookieStore.get(name)?.value; },
-          set(name: string, value: string, options: any) { cookieStore.set(name, value, options); },
-          remove(name: string, options: any) { cookieStore.delete(name); },
-        },
-      }
-    );
-
-    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-
-    if (!error && data.session) {
-      // Session established successfully.
-      // Always go to setup-account — that page will redirect to
-      // dashboard automatically if username is already set.
-      return NextResponse.redirect(`${origin}/setup-account`);
-    }
-  }
-
-  // Code missing or exchange failed — go to login
-  return NextResponse.redirect(`${origin}/`);
+  // Pass along any query params (e.g. ?code=xxx for OTP flow)
+  // The hash fragment is automatically preserved by the browser on redirect
+  return NextResponse.redirect(`${origin}/auth/confirm${search}`);
 }
