@@ -28,30 +28,39 @@ export async function middleware(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   const path = request.nextUrl.pathname;
 
-  // ── Not logged in ──────────────────────────────────────────────────────────
-  // Allow access to: login, register, pending, rejected, admin, auth callback
-  // Block access to: dashboard
-  if (!user) {
-    if (path.startsWith('/dashboard')) {
-      return NextResponse.redirect(new URL('/', request.url));
-    }
+  // ── Always allow these routes through regardless of auth state ─────────────
+  if (
+    path.startsWith('/auth') ||
+    path.startsWith('/api') ||
+    path.startsWith('/_next') ||
+    path === '/favicon.ico'
+  ) {
     return supabaseResponse;
   }
 
-  // ── Logged in — fetch their profile to check status and role ───────────────
+  // ── Not logged in ──────────────────────────────────────────────────────────
+  if (!user) {
+    if (path.startsWith('/dashboard') || path.startsWith('/admin/dashboard')) {
+      return NextResponse.redirect(new URL('/', request.url));
+    }
+    // Allow access to login, register, pending, rejected, setup-account
+    return supabaseResponse;
+  }
+
+  // ── Logged in — fetch profile ──────────────────────────────────────────────
   const { data: profile } = await supabase
     .from('profiles')
-    .select('status, role')
+    .select('status, role, username')
     .eq('id', user.id)
     .single();
 
   const status = profile?.status;
   const role = profile?.role;
+  const username = profile?.username;
 
   // ── Admin ──────────────────────────────────────────────────────────────────
-  // Admins can only access /admin routes, not the student dashboard
   if (role === 'admin') {
-    if (path.startsWith('/dashboard')) {
+    if (path.startsWith('/dashboard') || path === '/setup-account') {
       return NextResponse.redirect(new URL('/admin/dashboard', request.url));
     }
     if (path === '/' || path === '/pending' || path === '/rejected') {
@@ -62,7 +71,7 @@ export async function middleware(request: NextRequest) {
 
   // ── Student: pending ───────────────────────────────────────────────────────
   if (status === 'pending') {
-    if (path.startsWith('/dashboard') || path === '/' || path === '/rejected') {
+    if (path.startsWith('/dashboard') || path === '/') {
       return NextResponse.redirect(new URL('/pending', request.url));
     }
     return supabaseResponse;
@@ -70,7 +79,7 @@ export async function middleware(request: NextRequest) {
 
   // ── Student: rejected ──────────────────────────────────────────────────────
   if (status === 'rejected') {
-    if (path.startsWith('/dashboard') || path === '/' || path === '/pending') {
+    if (path.startsWith('/dashboard') || path === '/') {
       return NextResponse.redirect(new URL('/rejected', request.url));
     }
     return supabaseResponse;
@@ -78,14 +87,26 @@ export async function middleware(request: NextRequest) {
 
   // ── Student: approved ──────────────────────────────────────────────────────
   if (status === 'approved') {
-    // Already logged in approved student visiting login/register → send to dashboard
+    // If approved but no username yet — they must complete setup first
+    if (!username && path !== '/setup-account') {
+      return NextResponse.redirect(new URL('/setup-account', request.url));
+    }
+
+    // If setup complete and visiting setup-account again — send to dashboard
+    if (username && path === '/setup-account') {
+      return NextResponse.redirect(new URL('/dashboard', request.url));
+    }
+
+    // Block approved students from login/pending/rejected pages
     if (path === '/' || path === '/pending' || path === '/rejected') {
       return NextResponse.redirect(new URL('/dashboard', request.url));
     }
-    // Block approved students from accessing admin routes
+
+    // Block approved students from admin routes
     if (path.startsWith('/admin')) {
       return NextResponse.redirect(new URL('/dashboard', request.url));
     }
+
     return supabaseResponse;
   }
 
