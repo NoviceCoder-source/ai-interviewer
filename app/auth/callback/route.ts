@@ -5,11 +5,6 @@ import { NextResponse } from 'next/server';
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get('code');
-  const next = searchParams.get('next') ?? '/';
-
-  console.log("--- CALLBACK TRIGGERED ---");
-  console.log("Code found:", !!code);
-  console.log("Next param:", next);
 
   if (code) {
     const cookieStore = await cookies();
@@ -26,17 +21,15 @@ export async function GET(request: Request) {
     );
 
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-    console.log("Session created:", !!data.session, "Error:", error?.message);
 
     if (!error && data.session) {
-      // Check if this is a password recovery flow
-      if (data.session.user.recovery_sent_at) {
-        // This came from a password reset email — send to setup-account
-        return NextResponse.redirect(`${origin}/setup-account`);
-      }
+      // Session established successfully.
+      // Always go to setup-account — that page will redirect to
+      // dashboard automatically if username is already set.
+      return NextResponse.redirect(`${origin}/setup-account`);
     }
   }
 
-  // Default redirect for everything else
+  // Code missing or exchange failed — go to login
   return NextResponse.redirect(`${origin}/`);
 }
