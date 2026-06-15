@@ -12,9 +12,35 @@ export default function SetupAccountPage() {
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
 
-  // Verify the user is actually logged in and approved before showing this page
   useEffect(() => {
     const checkUser = async () => {
+      // Check if there's a recovery token in the URL query params
+      // Supabase sends: ?token=xxx&type=recovery
+      const params = new URLSearchParams(window.location.search);
+      const token = params.get('token');
+      const type = params.get('type');
+
+      if (token && type === 'recovery') {
+        // Exchange the token for a session
+        const { error: verifyError } = await supabase.auth.verifyOtp({
+          token_hash: token,
+          type: 'recovery',
+        });
+
+        if (verifyError) {
+          console.error('Token verify error:', verifyError);
+          // Link expired or invalid — send back to login
+          router.replace('/?error=link_expired');
+          return;
+        }
+
+        // Token verified — user is now logged in, clear the URL params
+        window.history.replaceState({}, '', '/setup-account');
+        setChecking(false);
+        return;
+      }
+
+      // No token in URL — check if already logged in (returning to this page)
       const { data: { user } } = await supabase.auth.getUser();
 
       if (!user) {
@@ -33,7 +59,7 @@ export default function SetupAccountPage() {
         return;
       }
 
-      // If they already set up their account, send them to dashboard
+      // Already set up — send to dashboard
       if (profile.username) {
         router.replace('/dashboard');
         return;
@@ -72,7 +98,7 @@ export default function SetupAccountPage() {
     setLoading(true);
 
     try {
-      // Check if username is already taken
+      // Check if username is taken
       const { data: existing } = await supabase
         .from('profiles')
         .select('id')
@@ -84,7 +110,7 @@ export default function SetupAccountPage() {
         return;
       }
 
-      // Update password in Supabase auth
+      // Set the new password
       const { error: passwordError } = await supabase.auth.updateUser({
         password,
       });
@@ -106,7 +132,6 @@ export default function SetupAccountPage() {
         return;
       }
 
-      // All done — redirect to dashboard
       router.replace('/dashboard');
 
     } catch (err) {
@@ -142,9 +167,7 @@ export default function SetupAccountPage() {
 
         <form onSubmit={handleSetup} className="space-y-4">
           <div>
-            <label className="block text-white text-sm font-bold mb-1">
-              Choose a Username
-            </label>
+            <label className="block text-white text-sm font-bold mb-1">Choose a Username</label>
             <input
               type="text"
               required
@@ -157,9 +180,7 @@ export default function SetupAccountPage() {
           </div>
 
           <div>
-            <label className="block text-white text-sm font-bold mb-1">
-              Choose a Password
-            </label>
+            <label className="block text-white text-sm font-bold mb-1">Choose a Password</label>
             <input
               type="password"
               required
@@ -171,9 +192,7 @@ export default function SetupAccountPage() {
           </div>
 
           <div>
-            <label className="block text-white text-sm font-bold mb-1">
-              Confirm Password
-            </label>
+            <label className="block text-white text-sm font-bold mb-1">Confirm Password</label>
             <input
               type="password"
               required

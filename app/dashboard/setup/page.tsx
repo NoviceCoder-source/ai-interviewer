@@ -17,7 +17,7 @@ export default function SetupInterviewPage() {
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      
+
       if (!session) {
         alert("You must be logged in to start an interview.");
         setIsLoading(false);
@@ -128,10 +128,8 @@ export default function SetupInterviewPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-
           {mode === 'normal' ? (
             <>
-              {/* Subject Selection */}
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-2">
                   Select Subject
@@ -150,7 +148,6 @@ export default function SetupInterviewPage() {
                 </select>
               </div>
 
-              {/* Difficulty Selection */}
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-2">
                   Select Difficulty
@@ -190,7 +187,6 @@ export default function SetupInterviewPage() {
             </>
           ) : (
             <>
-              {/* Resume Mode */}
               <div className="bg-indigo-50 rounded-xl p-6 border border-indigo-100 text-center space-y-4">
                 <div className="text-4xl">📄</div>
                 <div>
