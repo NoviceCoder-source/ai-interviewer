@@ -25,25 +25,25 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  const { data: { user } } = await supabase.auth.getUser();
   const path = request.nextUrl.pathname;
 
-  // ── Always allow these routes through regardless of auth state ─────────────
-  if (
-    path.startsWith('/auth') ||
-    path.startsWith('/api') ||
-    path.startsWith('/_next') ||
-    path === '/favicon.ico'
-  ) {
-    return supabaseResponse;
+  // ── Allow setup-account through if it has a recovery token ────────────────
+  // Supabase sends: /setup-account?token=xxx&type=recovery
+  // Middleware runs server-side before the page loads, so the token is in
+  // the query params and we must let it through unauthenticated.
+  const token = request.nextUrl.searchParams.get('token');
+  const type = request.nextUrl.searchParams.get('type');
+  if (path === '/setup-account' && token && type === 'recovery') {
+    return supabaseResponse; // let it through — page will verify the token
   }
+
+  const { data: { user } } = await supabase.auth.getUser();
 
   // ── Not logged in ──────────────────────────────────────────────────────────
   if (!user) {
-    if (path.startsWith('/dashboard') || path.startsWith('/admin/dashboard')) {
+    if (path.startsWith('/dashboard')) {
       return NextResponse.redirect(new URL('/', request.url));
     }
-    // Allow access to login, register, pending, rejected, setup-account
     return supabaseResponse;
   }
 
@@ -60,7 +60,7 @@ export async function middleware(request: NextRequest) {
 
   // ── Admin ──────────────────────────────────────────────────────────────────
   if (role === 'admin') {
-    if (path.startsWith('/dashboard') || path === '/setup-account') {
+    if (path.startsWith('/dashboard')) {
       return NextResponse.redirect(new URL('/admin/dashboard', request.url));
     }
     if (path === '/' || path === '/pending' || path === '/rejected') {
@@ -71,7 +71,7 @@ export async function middleware(request: NextRequest) {
 
   // ── Student: pending ───────────────────────────────────────────────────────
   if (status === 'pending') {
-    if (path.startsWith('/dashboard') || path === '/') {
+    if (path.startsWith('/dashboard') || path === '/' || path === '/rejected') {
       return NextResponse.redirect(new URL('/pending', request.url));
     }
     return supabaseResponse;
@@ -79,34 +79,28 @@ export async function middleware(request: NextRequest) {
 
   // ── Student: rejected ──────────────────────────────────────────────────────
   if (status === 'rejected') {
-    if (path.startsWith('/dashboard') || path === '/') {
+    if (path.startsWith('/dashboard') || path === '/' || path === '/pending') {
       return NextResponse.redirect(new URL('/rejected', request.url));
     }
     return supabaseResponse;
   }
 
-  // ── Student: approved ──────────────────────────────────────────────────────
-  if (status === 'approved') {
-    // If approved but no username yet — they must complete setup first
-    if (!username && path !== '/setup-account') {
+  // ── Student: approved, no username yet → must complete setup ──────────────
+  if (status === 'approved' && !username) {
+    if (path !== '/setup-account') {
       return NextResponse.redirect(new URL('/setup-account', request.url));
     }
+    return supabaseResponse;
+  }
 
-    // If setup complete and visiting setup-account again — send to dashboard
-    if (username && path === '/setup-account') {
+  // ── Student: approved and fully set up ────────────────────────────────────
+  if (status === 'approved') {
+    if (path === '/' || path === '/pending' || path === '/rejected' || path === '/setup-account') {
       return NextResponse.redirect(new URL('/dashboard', request.url));
     }
-
-    // Block approved students from login/pending/rejected pages
-    if (path === '/' || path === '/pending' || path === '/rejected') {
-      return NextResponse.redirect(new URL('/dashboard', request.url));
-    }
-
-    // Block approved students from admin routes
     if (path.startsWith('/admin')) {
       return NextResponse.redirect(new URL('/dashboard', request.url));
     }
-
     return supabaseResponse;
   }
 
@@ -115,6 +109,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|auth/callback|api).*)',
+    '/((?!_next/static|_next/image|favicon.ico|auth/callback|auth/confirm|api).*)',
   ],
 };
