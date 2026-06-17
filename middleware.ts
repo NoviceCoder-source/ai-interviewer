@@ -27,16 +27,9 @@ export async function middleware(request: NextRequest) {
 
   const path = request.nextUrl.pathname;
 
-  // ── Allow setup-account through if it has a recovery token ────────────────
-  const token = request.nextUrl.searchParams.get('token');
-  const type = request.nextUrl.searchParams.get('type');
-  if (path === '/setup-account' && token && type === 'recovery') {
-    return supabaseResponse;
-  }
-
   const { data: { user } } = await supabase.auth.getUser();
 
-  // ── Not logged in ──────────────────────────────────────────────────────────
+  // ── 1. NOT LOGGED IN GUARD RAIL ───────────────────────────────────────────
   if (!user) {
     if (path.startsWith('/dashboard') || path.startsWith('/admin') || path === '/pending' || path === '/rejected' || path === '/setup-account') {
       return NextResponse.redirect(new URL('/', request.url));
@@ -44,33 +37,31 @@ export async function middleware(request: NextRequest) {
     return supabaseResponse;
   }
 
-  // ── Logged in — fetch profile with Robust Mismatch Fallback ──────────────────
+  // ── 2. LOGGED IN — FETCH PROFILE WITH MULTI-LAYER FALLBACK ────────────────
   let profileData: any = null;
 
-  // 1. Primary Check: Scan by Auth User ID
+  // Primary Check: Fetch by Dynamic User ID
   const { data: primaryProfile } = await supabase
     .from('profiles')
-    .select('status, role, username, email')
+    .select('status, role')
     .eq('id', user.id)
-    .maybeSingle(); // Prevent code from crashing if 0 rows are returned
+    .maybeSingle();
 
   profileData = primaryProfile;
 
-  // 🚀 FALLBACK GATEWAY RECOVERY: 
-  // Agar ID mismatch ki wajah se user row nahi mili, toh logged-in email string se scan karo!
+  // Fallback Check: Fetch by Authenticated Email String
   if (!profileData && user.email) {
     const { data: backupProfile } = await supabase
       .from('profiles')
-      .select('status, role, username, email')
+      .select('status, role')
       .eq('email', user.email)
       .maybeSingle();
 
     profileData = backupProfile;
   }
 
-  // Absolute safety fallback if the account exists in auth but has no row in profiles
+  // Safety Break if user has an auth account but no custom row inside profiles table
   if (!profileData) {
-    // If no row exists at all, don't loop — let them hit home or handle gracefully
     if (path !== '/') {
       return NextResponse.redirect(new URL('/', request.url));
     }
@@ -79,9 +70,8 @@ export async function middleware(request: NextRequest) {
 
   const status = profileData?.status;
   const role = profileData?.role;
-  const username = profileData?.username;
 
-  // ── Admin ──────────────────────────────────────────────────────────────────
+  // ── 3. ADMIN SECURITY ROUTING ─────────────────────────────────────────────
   if (role === 'admin') {
     if (!path.startsWith('/admin')) {
       return NextResponse.redirect(new URL('/admin/dashboard', request.url));
@@ -89,7 +79,7 @@ export async function middleware(request: NextRequest) {
     return supabaseResponse;
   }
 
-  // ── Student: pending ───────────────────────────────────────────────────────
+  // ── 4. STUDENT PENDING SECURITY ROUTING ───────────────────────────────────
   if (status === 'pending') {
     if (path !== '/pending') {
       return NextResponse.redirect(new URL('/pending', request.url));
@@ -97,7 +87,7 @@ export async function middleware(request: NextRequest) {
     return supabaseResponse;
   }
 
-  // ── Student: rejected ──────────────────────────────────────────────────────
+  // ── 5. STUDENT REJECTED SECURITY ROUTING ──────────────────────────────────
   if (status === 'rejected') {
     if (path !== '/rejected') {
       return NextResponse.redirect(new URL('/rejected', request.url));
@@ -105,15 +95,9 @@ export async function middleware(request: NextRequest) {
     return supabaseResponse;
   }
 
-  // ── Student: approved, no username yet → must complete setup ──────────────
-  if (status === 'approved' && !username) {
-    if (path !== '/setup-account') {
-      return NextResponse.redirect(new URL('/setup-account', request.url));
-    }
-    return supabaseResponse;
-  }
-
-  // ── Student: approved and fully set up ────────────────────────────────────
+  // ── 6. STUDENT APPROVED GATEWAY (SIMPLIFIED & SOLID) ──────────────────────
+  // 🚀 THE FIX: We completely removed the setup-account blocker check! 
+  // If the status is approved, let them enter the dashboard directly.
   if (status === 'approved') {
     if (path === '/' || path === '/pending' || path === '/rejected' || path === '/setup-account' || path.startsWith('/admin')) {
       return NextResponse.redirect(new URL('/dashboard', request.url));
