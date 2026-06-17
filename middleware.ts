@@ -26,83 +26,49 @@ export async function middleware(request: NextRequest) {
   );
 
   const path = request.nextUrl.pathname;
-
   const { data: { user } } = await supabase.auth.getUser();
 
-  // ── 1. NOT LOGGED IN GUARD RAIL ───────────────────────────────────────────
+  // 1. Agar user logged in nahi hai aur dashboard/admin access kar raha hai -> Send to login
   if (!user) {
-    if (path.startsWith('/dashboard') || path.startsWith('/admin') || path === '/pending' || path === '/rejected' || path === '/setup-account') {
+    if (path.startsWith('/dashboard') || path.startsWith('/admin') || path === '/pending' || path === '/rejected') {
       return NextResponse.redirect(new URL('/', request.url));
     }
     return supabaseResponse;
   }
 
-  // ── 2. LOGGED IN — FETCH PROFILE WITH MULTI-LAYER FALLBACK ────────────────
-  let profileData: any = null;
-
-  // Primary Check: Fetch by Dynamic User ID
-  const { data: primaryProfile } = await supabase
+  // 2. Fetch Profile strictly by ID (No fallbacks needed anymore!)
+  const { data: profile } = await supabase
     .from('profiles')
-    .select('status, role')
+    .select('role, status')
     .eq('id', user.id)
     .maybeSingle();
 
-  profileData = primaryProfile;
-
-  // Fallback Check: Fetch by Authenticated Email String
-  if (!profileData && user.email) {
-    const { data: backupProfile } = await supabase
-      .from('profiles')
-      .select('status, role')
-      .eq('email', user.email)
-      .maybeSingle();
-
-    profileData = backupProfile;
+  // 3. Loop Breaker Check: Agar user landing page '/' par hai par already approved hai -> Send to dashboard
+  if (path === '/' && profile?.status === 'approved' && profile?.role === 'student') {
+    return NextResponse.redirect(new URL('/dashboard', request.url));
+  }
+  if (path === '/' && profile?.role === 'admin') {
+    return NextResponse.redirect(new URL('/admin/dashboard', request.url));
   }
 
-  // Safety Break if user has an auth account but no custom row inside profiles table
-  if (!profileData) {
-    if (path !== '/') {
+  // 4. Secure Authorization Gateway Redirections
+  if (path.startsWith('/dashboard') || path.startsWith('/admin')) {
+    if (!profile) {
       return NextResponse.redirect(new URL('/', request.url));
     }
-    return supabaseResponse;
-  }
 
-  const status = profileData?.status;
-  const role = profileData?.role;
+    if (profile.role === 'student') {
+      if (profile.status === 'pending' && path !== '/pending') {
+        return NextResponse.redirect(new URL('/pending', request.url));
+      }
+      if (profile.status === 'rejected' && path !== '/rejected') {
+        return NextResponse.redirect(new URL('/rejected', request.url));
+      }
+    }
 
-  // ── 3. ADMIN SECURITY ROUTING ─────────────────────────────────────────────
-  if (role === 'admin') {
-    if (!path.startsWith('/admin')) {
+    if (profile.role === 'admin' && !path.startsWith('/admin')) {
       return NextResponse.redirect(new URL('/admin/dashboard', request.url));
     }
-    return supabaseResponse;
-  }
-
-  // ── 4. STUDENT PENDING SECURITY ROUTING ───────────────────────────────────
-  if (status === 'pending') {
-    if (path !== '/pending') {
-      return NextResponse.redirect(new URL('/pending', request.url));
-    }
-    return supabaseResponse;
-  }
-
-  // ── 5. STUDENT REJECTED SECURITY ROUTING ──────────────────────────────────
-  if (status === 'rejected') {
-    if (path !== '/rejected') {
-      return NextResponse.redirect(new URL('/rejected', request.url));
-    }
-    return supabaseResponse;
-  }
-
-  // ── 6. STUDENT APPROVED GATEWAY (SIMPLIFIED & SOLID) ──────────────────────
-  // 🚀 THE FIX: We completely removed the setup-account blocker check! 
-  // If the status is approved, let them enter the dashboard directly.
-  if (status === 'approved') {
-    if (path === '/' || path === '/pending' || path === '/rejected' || path === '/setup-account' || path.startsWith('/admin')) {
-      return NextResponse.redirect(new URL('/dashboard', request.url));
-    }
-    return supabaseResponse;
   }
 
   return supabaseResponse;
