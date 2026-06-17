@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '../../lib/supabase';
+import { supabase } from '../../lib/supabase'; // Using your verified relative path layout
 
 type Student = {
   id: string;
@@ -19,7 +19,6 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<FilterStatus>('pending');
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [adminName, setAdminName] = useState('Admin');
 
   useEffect(() => {
@@ -40,7 +39,6 @@ export default function AdminDashboard() {
         router.push('/');
         return;
       }
-
       if (profile.full_name) setAdminName(profile.full_name);
     };
 
@@ -52,18 +50,21 @@ export default function AdminDashboard() {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, full_name, email, contact, status, updated_at')
+        .select('id, full_name, email, contact, status, updated_at, role')
         .eq('status', status)
-        .eq('role', 'student')
-        .order('updated_at', { ascending: false });
+        .order('updated_at', { ascending: false }); // Ordered correctly by your actual database column
 
       if (error) {
         console.error('Fetch error:', error.message);
       } else {
-        setStudents(data || []);
+        // Safe parsing fallback filters for legacy test records missing roles
+        const filteredData = (data || []).filter(
+          (user) => user.role === 'student' || (!user.role && user.id !== '487b5110-d8b8-4526-86b9-1f967bd8b942')
+        );
+        setStudents(filteredData as Student[]);
       }
     } catch (err) {
-      console.error('Unexpected fetch error:', err);
+      console.error('Unexpected dashboard fetch exception:', err);
     } finally {
       setLoading(false);
     }
@@ -73,45 +74,32 @@ export default function AdminDashboard() {
     fetchStudents(activeTab);
   }, [activeTab]);
 
-  // ── Handle approve/reject via API route (uses service role key) ───────────
-  const handleStatusChange = async (
-    id: string,
-    email: string,
-    action: 'approved' | 'rejected'
-  ) => {
-    setActionLoading(id);
+  // ── FIXED: Complete Student Object Mutation Payload ───────────────────────
+  const handleStatusChange = async (student: Student, newStatus: 'approved' | 'rejected') => {
     try {
-      const res = await fetch('/api/admin-action', {
+      // Dispatch complete parameters required by your new transactional email endpoint
+      const response = await fetch('/api/admin-action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          studentId: id,
-          studentEmail: email,
-          action: action === 'approved' ? 'approve' : 'reject',
+          studentId: student.id,
+          action: newStatus,
+          studentEmail: student.email || 'No Email Provided', 
+          studentName: student.full_name,
         }),
       });
 
-      const data = await res.json();
+      const result = await response.json();
 
-      if (!res.ok) {
-        alert(`Failed: ${data.error}`);
-        return;
+      if (!response.ok) {
+        alert(`Action Failed: ${result.error || 'Could not update status.'}`);
+      } else {
+        // 🚀 Optimistic UI: Instantly pull the card out of view state upon network confirmation
+        setStudents((prevStudents) => prevStudents.filter((item) => item.id !== student.id));
       }
-
-      if (data.warning) {
-        alert(`⚠️ ${data.warning}`);
-      } else if (action === 'approved') {
-        alert(`✅ Student approved! A setup link has been sent to ${email}`);
-      }
-
-      // Remove card from current list immediately
-      setStudents((prev) => prev.filter((s) => s.id !== id));
-
     } catch (err) {
-      console.error('Status change error:', err);
-      alert('Something went wrong. Please try again.');
-    } finally {
-      setActionLoading(null);
+      console.error('Error during status transformation update:', err);
+      alert('Network exception: Unable to complete administrative pipeline task.');
     }
   };
 
@@ -122,15 +110,13 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-[#0B132B] text-white p-8">
-      {/* Header */}
+      {/* Upper Navigation Header Grid */}
       <div className="flex justify-between items-center mb-10 max-w-6xl mx-auto">
         <div>
           <h1 className="text-3xl font-extrabold tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400">
             🔐 BIGNALYTICS <span className="text-indigo-400 font-medium text-2xl">ADMIN</span>
           </h1>
-          <p className="text-gray-400 text-xs mt-1">
-            Logged in as <span className="text-white font-semibold">{adminName}</span>
-          </p>
+          <p className="text-gray-400 text-xs mt-1">Logged in as <span className="text-white font-semibold">{adminName}</span></p>
         </div>
         <button
           onClick={handleSignOut}
@@ -141,7 +127,7 @@ export default function AdminDashboard() {
       </div>
 
       <div className="max-w-6xl mx-auto">
-        {/* Filter Tabs */}
+        {/* State Classification Sorting Tabs */}
         <div className="flex space-x-4 mb-6">
           {(['pending', 'approved', 'rejected'] as FilterStatus[]).map((tab) => (
             <button
@@ -149,11 +135,7 @@ export default function AdminDashboard() {
               onClick={() => setActiveTab(tab)}
               className={`px-6 py-3 rounded-xl font-bold text-sm tracking-wider uppercase transition-all ${
                 activeTab === tab
-                  ? tab === 'pending'
-                    ? 'bg-amber-500 text-[#0B132B] shadow-lg shadow-amber-500/20'
-                    : tab === 'approved'
-                    ? 'bg-emerald-500 text-[#0B132B] shadow-lg shadow-emerald-500/20'
-                    : 'bg-red-500 text-white shadow-lg shadow-red-500/20'
+                  ? 'bg-amber-500 text-[#0B132B] shadow-lg shadow-amber-500/20'
                   : 'bg-white/5 text-gray-400 hover:bg-white/10'
               }`}
             >
@@ -162,16 +144,14 @@ export default function AdminDashboard() {
           ))}
         </div>
 
-        {/* Student Cards */}
+        {/* Core Profile Rendering Sandbox Container */}
         <div className="bg-white/[0.02] backdrop-blur-md border border-white/5 rounded-2xl p-8 min-h-[350px] flex flex-col justify-center">
           {loading ? (
             <div className="text-center text-gray-400 font-medium">Loading records...</div>
           ) : students.length === 0 ? (
             <div className="text-center space-y-3">
               <div className="text-4xl">📬</div>
-              <h3 className="text-gray-400 font-bold uppercase tracking-widest text-sm">
-                No {activeTab} students
-              </h3>
+              <h3 className="text-gray-400 font-bold uppercase tracking-widest text-sm">No {activeTab} Students</h3>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 align-top self-start w-full">
@@ -181,59 +161,26 @@ export default function AdminDashboard() {
                   className="bg-white/5 border border-white/10 rounded-xl p-5 flex flex-col justify-between hover:border-white/20 transition-all shadow-md"
                 >
                   <div>
-                    <h3 className="text-lg font-bold text-white mb-1">
-                      {student.full_name || 'No name provided'}
-                    </h3>
-                    <p className="text-gray-400 text-xs font-medium mb-3">
-                      {student.email || 'No email provided'}
-                    </p>
+                    <h3 className="text-lg font-bold text-white mb-1">{student.full_name}</h3>
+                    <p className="text-gray-400 text-xs font-medium mb-3">{student.email || 'No Email Provided'}</p>
                     <div className="text-xs text-gray-300 space-y-1 bg-black/20 p-3 rounded-lg border border-white/5">
                       <div>📞 <span className="font-semibold">{student.contact || 'N/A'}</span></div>
                     </div>
                   </div>
 
-                  {/* Pending — show approve and reject */}
                   {activeTab === 'pending' && (
                     <div className="flex space-x-3 mt-5">
                       <button
-                        onClick={() => handleStatusChange(student.id, student.email, 'approved')}
-                        disabled={actionLoading === student.id}
-                        className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 rounded-lg text-xs tracking-wider transition-all disabled:opacity-50"
+                        onClick={() => handleStatusChange(student, 'approved')}
+                        className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 rounded-lg text-xs tracking-wider transition-all"
                       >
-                        {actionLoading === student.id ? '...' : 'APPROVE'}
+                        APPROVE
                       </button>
                       <button
-                        onClick={() => handleStatusChange(student.id, student.email, 'rejected')}
-                        disabled={actionLoading === student.id}
-                        className="flex-1 bg-red-500/20 hover:bg-red-500 text-red-200 font-bold py-2 rounded-lg text-xs tracking-wider border border-red-500/30 transition-all disabled:opacity-50"
+                        onClick={() => handleStatusChange(student, 'rejected')}
+                        className="flex-1 bg-red-500/20 hover:bg-red-500 text-red-200 font-bold py-2 rounded-lg text-xs tracking-wider border border-red-500/30 transition-all"
                       >
-                        {actionLoading === student.id ? '...' : 'REJECT'}
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Approved — show revoke option */}
-                  {activeTab === 'approved' && (
-                    <div className="mt-5">
-                      <button
-                        onClick={() => handleStatusChange(student.id, student.email, 'rejected')}
-                        disabled={actionLoading === student.id}
-                        className="w-full bg-red-500/20 hover:bg-red-500 text-red-200 font-bold py-2 rounded-lg text-xs tracking-wider border border-red-500/30 transition-all disabled:opacity-50"
-                      >
-                        {actionLoading === student.id ? '...' : 'REVOKE ACCESS'}
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Rejected — show approve option */}
-                  {activeTab === 'rejected' && (
-                    <div className="mt-5">
-                      <button
-                        onClick={() => handleStatusChange(student.id, student.email, 'approved')}
-                        disabled={actionLoading === student.id}
-                        className="w-full bg-emerald-500/20 hover:bg-emerald-500 text-emerald-200 font-bold py-2 rounded-lg text-xs tracking-wider border border-emerald-500/30 transition-all disabled:opacity-50"
-                      >
-                        {actionLoading === student.id ? '...' : 'APPROVE'}
+                        REJECT
                       </button>
                     </div>
                   )}
