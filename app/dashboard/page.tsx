@@ -4,6 +4,8 @@ import { supabase } from '../lib/supabase';
 import { useRouter } from 'next/navigation';
 import { User } from '@supabase/supabase-js';
 
+export const dynamic = 'force-dynamic';
+
 export default function Dashboard() {
   const [user, setUser] = useState<User | null>(null);
   const [studentName, setStudentName] = useState('');
@@ -13,16 +15,13 @@ export default function Dashboard() {
   useEffect(() => {
     const verifyWorkspaceAccess = async () => {
       try {
-        // 1. Fetch current active session profile credentials safely
         const { data: { user }, error: authError } = await supabase.auth.getUser();
         
         if (authError || !user) {
-          console.warn('Unauthorized session identity contextual framework.');
-          router.push('/'); // 🚀 FIXED: Pushes back to your actual homepage instead of non-existent /login
+          window.location.replace('/');
           return;
         }
 
-        // 2. Query your backend data matrix to confirm role and approval tier
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
           .select('full_name, role, status')
@@ -30,36 +29,30 @@ export default function Dashboard() {
           .single();
 
         if (profileError || !profile) {
-          console.error('Failed to resolve profile matrix map matching current session UID.');
           await supabase.auth.signOut();
-          router.push('/');
+          window.location.replace('/');
           return;
         }
 
-        // 🚀 CRITICAL SECURITY CHECK GATEWAY: Ensure user is a student AND is approved!
         if (profile.role === 'student' && profile.status === 'approved') {
           setUser(user);
           setStudentName(profile.full_name || 'Student Workspace');
-          setLoading(false); // Drop the loader layout cleanly
+          setLoading(false);
         } else {
-          // If they are pending, rejected, or an admin attempting to run a student view, log out and boot
-          console.warn(`Access denied for profile classification status: ${profile.status}`);
           await supabase.auth.signOut();
-          router.push('/');
+          window.location.replace('/');
         }
-
       } catch (err) {
-        console.error('Unexpected dashboard authentication core loop breakdown:', err);
-        router.push('/');
+        window.location.replace('/');
       }
     };
 
     verifyWorkspaceAccess();
-  }, [router]);
+  }, []);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
-    router.push('/'); // 🚀 FIXED: Point directly back to your home landing deck folder tree route
+    window.location.replace('/');
   };
 
   if (loading) {
@@ -73,8 +66,6 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-[#0B132B] p-4 md:p-12 font-sans text-white">
       <div className="max-w-5xl mx-auto bg-white/[0.02] backdrop-blur-md rounded-[3rem] shadow-xl p-8 md:p-16 border border-white/5">
-        
-        {/* HEADER SECTION LAYOUT */}
         <header className="flex justify-between items-start mb-12">
           <div>
             <h1 className="text-4xl font-extrabold tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400 mb-2">
@@ -93,9 +84,7 @@ export default function Dashboard() {
           </button>
         </header>
 
-        {/* INTERACTION LINK WORKSPACE PANELS */}
         <div className="grid md:grid-cols-2 gap-8">
-          
           <div 
             onClick={() => router.push('/dashboard/setup')}
             className="cursor-pointer p-10 bg-white/[0.01] border-2 border-dashed border-white/10 rounded-[3rem] hover:border-indigo-400 hover:bg-indigo-500/[0.02] transition-all flex flex-col items-center justify-center text-center group"
@@ -113,10 +102,8 @@ export default function Dashboard() {
             <h3 className="text-white font-bold text-xl mb-2 uppercase tracking-wide">Past Sessions</h3>
             <p className="text-gray-400 text-[10px] font-bold uppercase tracking-widest">Review grades & feedback</p>
           </div>
-
         </div>
 
-        {/* BOTTOM METADATA BAR FOOTER */}
         <footer className="mt-16 text-center">
           <p className="text-[9px] font-black uppercase tracking-[0.5em] text-gray-500">
             V.2.0 // Active Virtual Environment

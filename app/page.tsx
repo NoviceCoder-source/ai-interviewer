@@ -1,25 +1,22 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { supabase } from './lib/supabase';
 
 export default function Home() {
-  const router = useRouter();
   const [isSignUp, setIsSignUp] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [registrationSuccess, setRegistrationSuccess] = useState(false);
 
-  // Form Field States
+  // Core Form Binding Hooks
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [fullName, setFullName] = useState('');
-  const [usernameInput, setUsernameInput] = useState(''); // Separate handling to prevent name collisions
+  const [usernameInput, setUsernameInput] = useState('');
   const [contact, setContact] = useState('');
 
-  // ── True Username Login Processing ────────────────────────────────────────
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -34,7 +31,6 @@ export default function Home() {
         return;
       }
 
-      // If the user didn't type a classic email string, assume it's a username lookup request
       if (!loginEmail.includes('@')) {
         const { data: profiles, error: lookupError } = await supabase
           .from('profiles')
@@ -42,22 +38,20 @@ export default function Home() {
           .eq('username', loginEmail);
 
         if (lookupError) {
-          alert(`Database Lookup Error: ${lookupError.message}`);
-          setErrorMessage(`Database lookup error: ${lookupError.message}`);
+          setErrorMessage(`Database lookup failure: ${lookupError.message}`);
           setLoading(false);
           return;
         }
 
         if (!profiles || profiles.length === 0) {
-          setErrorMessage('No profile found matching that username. Please sign up or verify spelling.');
+          setErrorMessage('No profile found matching that username.');
           setLoading(false);
           return;
         }
 
-        loginEmail = profiles[0].email; // Safely pull the email out of the first match
+        loginEmail = profiles[0].email;
       }
 
-      // Authenticate via Supabase identity system
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: loginEmail,
         password: password,
@@ -83,13 +77,11 @@ export default function Home() {
           return;
         }
 
-        // Admin Entry Route
         if (profile.role === 'admin') {
-          window.location.href = '/admin/dashboard';
+          window.location.replace('/admin/dashboard');
           return;
         }
 
-        // Student Access Check Gateway
         if (profile.role === 'student') {
           if (profile.status === 'pending') {
             setErrorMessage('Your registration is currently awaiting administrative approval.');
@@ -98,22 +90,19 @@ export default function Home() {
             setErrorMessage('Your access request has been declined by administration.');
             await supabase.auth.signOut();
           } else {
-            // Hard relocate to clear viewport cache instantly
-            window.location.href = '/dashboard'; 
+            // Force hard location swap to discard previous layout memory state
+            window.location.replace('/dashboard'); 
             return;
           }
         }
       }
     } catch (err: any) {
-      console.error('Authentication runtime loop exception:', err);
-      alert(`Runtime Exception Error: ${err.message || err}`);
       setErrorMessage(err.message || 'An unexpected authentication error occurred.');
     } finally {
       setLoading(false);
     }
   };
 
-  // ── Handle Registration Pipeline Flow ─────────────────────────────────────
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -182,18 +171,18 @@ export default function Home() {
             <div className="text-5xl">⏳</div>
             <h2 className="text-lg font-bold text-amber-400">Awaiting Administrative Approval</h2>
             <p className="text-gray-300 text-xs leading-relaxed max-w-xs mx-auto">
-              Your account has been registered successfully. You will receive a notification email once an admin activates your profile access.
+              Your account has been registered successfully. Return to login once approved.
             </p>
             <button
               onClick={() => { setRegistrationSuccess(false); setIsSignUp(false); }}
-              className="mt-4 w-full bg-indigo-500 hover:bg-indigo-600 font-bold py-3 rounded-xl text-sm transition-all shadow-lg shadow-indigo-500/20"
+              className="mt-4 w-full bg-indigo-500 hover:bg-indigo-600 font-bold py-3 rounded-xl text-sm transition-all shadow-lg"
             >
               Return to Login
             </button>
           </div>
         ) : (
           <form onSubmit={isSignUp ? handleSignUp : handleLogin} className="space-y-4">
-            {isSignUp ? (
+            {isSignUp && (
               <>
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Full Name</label>
@@ -202,19 +191,8 @@ export default function Home() {
                     required
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
-                    className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 transition-all text-white"
+                    className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 text-white"
                     placeholder="Sam Thomson"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Username</label>
-                  <input
-                    type="text"
-                    required
-                    value={usernameInput}
-                    onChange={(e) => setUsernameInput(e.target.value)}
-                    className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 transition-all text-white"
-                    placeholder="sam_thomson"
                   />
                 </div>
                 <div>
@@ -223,7 +201,7 @@ export default function Home() {
                     type="text"
                     value={contact}
                     onChange={(e) => setContact(e.target.value)}
-                    className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 transition-all text-white"
+                    className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 text-white"
                     placeholder="9993348867"
                   />
                 </div>
@@ -234,24 +212,26 @@ export default function Home() {
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 transition-all text-white"
+                    className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 text-white"
                     placeholder="name@domain.com"
                   />
                 </div>
               </>
-            ) : (
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Username or Email</label>
-                <input
-                  type="text"
-                  required
-                  value={usernameInput}
-                  onChange={(e) => setUsernameInput(e.target.value)}
-                  className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 transition-all text-white"
-                  placeholder="sam_thomson or name@domain.com"
-                />
-              </div>
             )}
+
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
+                {isSignUp ? 'Username' : 'Username or Email'}
+              </label>
+              <input
+                type="text"
+                required
+                value={usernameInput}
+                onChange={(e) => setUsernameInput(e.target.value)}
+                className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 text-white"
+                placeholder="sam_thomson"
+              />
+            </div>
 
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Password</label>
@@ -260,7 +240,7 @@ export default function Home() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 transition-all text-white"
+                className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 text-white"
                 placeholder="••••••••"
               />
             </div>
@@ -272,8 +252,8 @@ export default function Home() {
                   type="password"
                   required
                   value={confirmPassword}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 transition-all text-white"
+                  onChange={(e) => setConfirmPassword(e.target.value)} // 🚀 FIXED: Maps correctly to setConfirmPassword
+                  className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 text-white"
                   placeholder="••••••••"
                 />
               </div>
@@ -282,7 +262,7 @@ export default function Home() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-500/50 text-white font-bold py-3 rounded-xl text-sm transition-all shadow-lg shadow-indigo-500/20 mt-6"
+              className="w-full bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-500/50 text-white font-bold py-3 rounded-xl text-sm transition-all shadow-lg mt-6"
             >
               {loading ? 'Processing Transaction...' : isSignUp ? 'Submit Registration' : 'Authenticate Session'}
             </button>
@@ -294,7 +274,7 @@ export default function Home() {
                   setIsSignUp(!isSignUp);
                   setErrorMessage('');
                 }}
-                className="text-xs font-medium text-indigo-400 hover:text-indigo-300 transition-all underline decoration-indigo-500/30 underline-offset-4"
+                className="text-xs font-medium text-indigo-400 hover:text-indigo-300 transition-all underline underline-offset-4"
               >
                 {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
               </button>
