@@ -1,14 +1,11 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '../../lib/supabase'; // Using your verified relative path layout
+import { supabase } from '../../lib/supabase';
 import { Resend } from 'resend';
-
-// Initialize Resend with your API key (add RESEND_API_KEY to your .env.local file)
-const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { studentId, action, studentEmail, studentName } = body; // action will be 'approved' or 'rejected'
+    const { studentId, action, studentEmail, studentName } = body;
 
     if (!studentId || !action || !studentEmail || !studentName) {
       return NextResponse.json({ error: 'Missing mandatory action fields.' }, { status: 400 });
@@ -70,16 +67,20 @@ export async function POST(request: Request) {
       `;
     }
 
-    // Attempt to send the notification email
+    // 🚀 FIXED: Lazy initialization inside the request lifecycle with a fallback string to satisfy Next.js compilation
+    const apiKey = process.env.RESEND_API_KEY || 're_mock_key_for_compilation_passes';
+    const resend = new Resend(apiKey);
+
+    // Only attempt the real email dispatch if the key is genuine
     if (process.env.RESEND_API_KEY) {
       await resend.emails.send({
-        from: 'Bignalytics <onboarding@resend.dev>', // You can change this when you get a custom domain
+        from: 'Bignalytics <onboarding@resend.dev>',
         to: studentEmail,
         subject: emailSubject,
         html: emailHtml,
       });
     } else {
-      console.warn('RESEND_API_KEY is missing. Skipping email dispatch, but DB updated successfully.');
+      console.warn('RESEND_API_KEY is missing in this environment. Skipping email dispatch.');
     }
 
     return NextResponse.json({ success: true, message: `Student profile successfully updated to ${action}.` });
