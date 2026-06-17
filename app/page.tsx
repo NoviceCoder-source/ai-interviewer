@@ -1,11 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { supabase } from './lib/supabase'; // Using your verified folder-level path layout
 
 export default function Home() {
-  const router = useRouter();
   const [isSignUp, setIsSignUp] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -30,7 +28,6 @@ export default function Home() {
 
       // If the user didn't type a classic email string, assume it's a username lookup request
       if (!username.includes('@')) {
-        // 🚀 FIXED: Replaced .single() with a safe data array check to prevent 406 crashes
         const { data: profiles, error: lookupError } = await supabase
           .from('profiles')
           .select('email')
@@ -78,9 +75,9 @@ export default function Home() {
           return;
         }
 
-        // Admin Entry Route
+        // Admin Entry Route - Hard global redirect to smash viewport locks
         if (profile.role === 'admin') {
-          router.push('/admin/dashboard');
+          window.location.href = '/admin/dashboard';
           return;
         }
 
@@ -93,8 +90,9 @@ export default function Home() {
             setErrorMessage('Your access request has been declined by administration.');
             await supabase.auth.signOut();
           } else {
-            // 🚀 FIXED: Routes directly to your actual folder layout path matching app/dashboard
-            router.push('/dashboard'); 
+            // 🚀 FIXED: Hard window redirect to instantly dump login DOM state and force render /dashboard
+            window.location.href = '/dashboard'; 
+            return;
           }
         }
       }
