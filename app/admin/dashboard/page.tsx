@@ -77,29 +77,34 @@ export default function AdminDashboard() {
   // ── FIXED: Complete Student Object Mutation Payload ───────────────────────
   const handleStatusChange = async (student: Student, newStatus: 'approved' | 'rejected') => {
     try {
-      // Dispatch complete parameters required by your new transactional email endpoint
-      const response = await fetch('/api/admin-action', {
+      // 1. Perform the status update directly via frontend Supabase client
+      const { error: dbError } = await supabase
+        .from('profiles')
+        .update({ status: newStatus })
+        .eq('id', student.id);
+
+      if (dbError) {
+        alert(`Database Update Failed: ${dbError.message}`);
+        return;
+      }
+
+      // 2. Optimistic UI: Immediately slice the student card off the screen dashboard
+      setStudents((prevStudents) => prevStudents.filter((item) => item.id !== student.id));
+
+      // 3. Fire-and-forget background ping to our API route just to deliver the notification email
+      fetch('/api/admin-action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          studentId: student.id,
           action: newStatus,
-          studentEmail: student.email || 'No Email Provided', 
+          studentEmail: student.email || 'No Email Provided',
           studentName: student.full_name,
         }),
-      });
+      }).catch((emailErr) => console.error('Background notification email delay:', emailErr));
 
-      const result = await response.json();
-
-      if (!response.ok) {
-        alert(`Action Failed: ${result.error || 'Could not update status.'}`);
-      } else {
-        // 🚀 Optimistic UI: Instantly pull the card out of view state upon network confirmation
-        setStudents((prevStudents) => prevStudents.filter((item) => item.id !== student.id));
-      }
     } catch (err) {
-      console.error('Error during status transformation update:', err);
-      alert('Network exception: Unable to complete administrative pipeline task.');
+      console.error('Error during administrative transformation loop:', err);
+      alert('System Exception: Unable to complete operation task.');
     }
   };
 
