@@ -31,6 +31,7 @@ export default function Home() {
         return;
       }
 
+      // Username standard matching logic
       if (!loginEmail.includes('@')) {
         const { data: profiles, error: lookupError } = await supabase
           .from('profiles')
@@ -52,6 +53,7 @@ export default function Home() {
         loginEmail = profiles[0].email;
       }
 
+      // Authenticate via Supabase identity system
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: loginEmail,
         password: password,
@@ -77,11 +79,16 @@ export default function Home() {
           return;
         }
 
+        // Admin Redirect Block
         if (profile.role === 'admin') {
-          window.location.replace('/admin/dashboard');
+          setLoading(false);
+          setTimeout(() => {
+            window.location.assign('/admin/dashboard');
+          }, 50);
           return;
         }
 
+        // Student Redirect Block
         if (profile.role === 'student') {
           if (profile.status === 'pending') {
             setErrorMessage('Your registration is currently awaiting administrative approval.');
@@ -90,8 +97,11 @@ export default function Home() {
             setErrorMessage('Your access request has been declined by administration.');
             await supabase.auth.signOut();
           } else {
-            // Force hard location swap to discard previous layout memory state
-            window.location.replace('/dashboard'); 
+            // 🚀 RELEASE FREEZE TOGGLE FIRST THEN HARD SWITCH VIEWPORT
+            setLoading(false);
+            setTimeout(() => {
+              window.location.assign('/dashboard');
+            }, 50);
             return;
           }
         }
@@ -252,7 +262,7 @@ export default function Home() {
                   type="password"
                   required
                   value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)} // 🚀 FIXED: Maps correctly to setConfirmPassword
+                  onChange={(e) => setConfirmPassword(e.target.value)}
                   className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 text-white"
                   placeholder="••••••••"
                 />

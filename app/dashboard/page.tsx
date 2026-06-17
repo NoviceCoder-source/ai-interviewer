@@ -25,18 +25,19 @@ export default function Dashboard() {
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
           .select('full_name, role, status')
-          .eq('id', user.id)
-          .single();
+          .eq('id', user.id);
 
-        if (profileError || !profile) {
+        if (profileError || !profile || profile.length === 0) {
           await supabase.auth.signOut();
           window.location.replace('/');
           return;
         }
 
-        if (profile.role === 'student' && profile.status === 'approved') {
+        const currentProfile = profile[0];
+
+        if (currentProfile.role === 'student' && currentProfile.status === 'approved') {
           setUser(user);
-          setStudentName(profile.full_name || 'Student Workspace');
+          setStudentName(currentProfile.full_name || 'Student Workspace');
           setLoading(false);
         } else {
           await supabase.auth.signOut();
