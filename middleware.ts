@@ -28,42 +28,62 @@ export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
 
   // ── Allow setup-account through if it has a recovery token ────────────────
-  // Supabase sends: /setup-account?token=xxx&type=recovery
-  // Middleware runs server-side before the page loads, so the token is in
-  // the query params and we must let it through unauthenticated.
   const token = request.nextUrl.searchParams.get('token');
   const type = request.nextUrl.searchParams.get('type');
   if (path === '/setup-account' && token && type === 'recovery') {
-    return supabaseResponse; // let it through — page will verify the token
+    return supabaseResponse;
   }
 
   const { data: { user } } = await supabase.auth.getUser();
 
   // ── Not logged in ──────────────────────────────────────────────────────────
   if (!user) {
-    if (path.startsWith('/dashboard')) {
+    if (path.startsWith('/dashboard') || path.startsWith('/admin') || path === '/pending' || path === '/rejected' || path === '/setup-account') {
       return NextResponse.redirect(new URL('/', request.url));
     }
     return supabaseResponse;
   }
 
-  // ── Logged in — fetch profile ──────────────────────────────────────────────
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('status, role, username')
-    .eq('id', user.id)
-    .single();
+  // ── Logged in — fetch profile with Robust Mismatch Fallback ──────────────────
+  let profileData: any = null;
 
-  const status = profile?.status;
-  const role = profile?.role;
-  const username = profile?.username;
+  // 1. Primary Check: Scan by Auth User ID
+  const { data: primaryProfile } = await supabase
+    .from('profiles')
+    .select('status, role, username, email')
+    .eq('id', user.id)
+    .maybeSingle(); // Prevent code from crashing if 0 rows are returned
+
+  profileData = primaryProfile;
+
+  // 🚀 FALLBACK GATEWAY RECOVERY: 
+  // Agar ID mismatch ki wajah se user row nahi mili, toh logged-in email string se scan karo!
+  if (!profileData && user.email) {
+    const { data: backupProfile } = await supabase
+      .from('profiles')
+      .select('status, role, username, email')
+      .eq('email', user.email)
+      .maybeSingle();
+
+    profileData = backupProfile;
+  }
+
+  // Absolute safety fallback if the account exists in auth but has no row in profiles
+  if (!profileData) {
+    // If no row exists at all, don't loop — let them hit home or handle gracefully
+    if (path !== '/') {
+      return NextResponse.redirect(new URL('/', request.url));
+    }
+    return supabaseResponse;
+  }
+
+  const status = profileData?.status;
+  const role = profileData?.role;
+  const username = profileData?.username;
 
   // ── Admin ──────────────────────────────────────────────────────────────────
   if (role === 'admin') {
-    if (path.startsWith('/dashboard')) {
-      return NextResponse.redirect(new URL('/admin/dashboard', request.url));
-    }
-    if (path === '/' || path === '/pending' || path === '/rejected') {
+    if (!path.startsWith('/admin')) {
       return NextResponse.redirect(new URL('/admin/dashboard', request.url));
     }
     return supabaseResponse;
@@ -71,7 +91,7 @@ export async function middleware(request: NextRequest) {
 
   // ── Student: pending ───────────────────────────────────────────────────────
   if (status === 'pending') {
-    if (path.startsWith('/dashboard') || path === '/' || path === '/rejected') {
+    if (path !== '/pending') {
       return NextResponse.redirect(new URL('/pending', request.url));
     }
     return supabaseResponse;
@@ -79,7 +99,7 @@ export async function middleware(request: NextRequest) {
 
   // ── Student: rejected ──────────────────────────────────────────────────────
   if (status === 'rejected') {
-    if (path.startsWith('/dashboard') || path === '/' || path === '/pending') {
+    if (path !== '/rejected') {
       return NextResponse.redirect(new URL('/rejected', request.url));
     }
     return supabaseResponse;
@@ -95,10 +115,7 @@ export async function middleware(request: NextRequest) {
 
   // ── Student: approved and fully set up ────────────────────────────────────
   if (status === 'approved') {
-    if (path === '/' || path === '/pending' || path === '/rejected' || path === '/setup-account') {
-      return NextResponse.redirect(new URL('/dashboard', request.url));
-    }
-    if (path.startsWith('/admin')) {
+    if (path === '/' || path === '/pending' || path === '/rejected' || path === '/setup-account' || path.startsWith('/admin')) {
       return NextResponse.redirect(new URL('/dashboard', request.url));
     }
     return supabaseResponse;
