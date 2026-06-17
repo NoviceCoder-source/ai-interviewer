@@ -1,61 +1,69 @@
 import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 import { Resend } from 'resend';
+
+// Create a secure, server-side admin client that completely bypasses RLS restrictions safely
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+  process.env.SUPABASE_SERVICE_ROLE_KEY || '', // 👈 Uses your service role key
+  { auth: { persistSession: false } }
+);
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { action, studentEmail, studentName } = body;
+    const { studentId, action, studentEmail, studentName } = body;
 
-    if (!action || !studentEmail || !studentName) {
-      return NextResponse.json({ error: 'Missing email communication fields.' }, { status: 400 });
+    if (!studentId || !action || !studentEmail || !studentName) {
+      return NextResponse.json({ error: 'Missing mandatory action fields.' }, { status: 400 });
     }
 
-    // Prepare notification content
-    let emailSubject = '';
-    let emailHtml = '';
+    // 1. Update database securely via server client (No RLS blocks possible here)
+    const { error: dbError } = await supabaseAdmin
+      .from('profiles')
+      .update({ status: action })
+      .eq('id', studentId);
 
-    if (action === 'approved') {
-      emailSubject = '🎉 Your Bignalytics Account Has Been Approved!';
-      emailHtml = `
-        <div style="font-family: sans-serif; max-width: 500px; padding: 20px; color: #111;">
-          <h2>Application Approved!</h2>
-          <p>Hi <strong>${studentName}</strong>,</p>
-          <p>Your registration request for Bignalytics has been reviewed and approved by the administration.</p>
-          <p>You can now go back to the platform and log in directly using the <strong>username and password</strong> you configured during signup.</p>
-          <br />
-          <p>Best regards,<br />Bignalytics Administration Team</p>
-        </div>
-      `;
-    } else if (action === 'rejected') {
-      emailSubject = 'Update regarding your Bignalytics Registration';
-      emailHtml = `
-        <div style="font-family: sans-serif; max-width: 500px; padding: 20px; color: #111;">
-          <h2>Registration Update</h2>
-          <p>Hi <strong>${studentName}</strong>,</p>
-          <p>Thank you for your interest in Bignalytics. Unfortunately, your account registration request has been declined at this time.</p>
-          <br />
-          <p>Best regards,<br />Bignalytics Administration Team</p>
-        </div>
-      `;
+    if (dbError) {
+      console.error('Admin DB clear exception:', dbError.message);
+      return NextResponse.json({ error: `Database mutation aborted: ${dbError.message}` }, { status: 500 });
     }
 
-    // Lazy load the mailer constructor to satisfy Next.js static compilation phases
-    const apiKey = process.env.RESEND_API_KEY || 're_mock_key_for_compilation_passes';
-    const resend = new Resend(apiKey);
+    // 2. Setup Notification Layout
+    let emailSubject = action === 'approved' 
+      ? '🎉 Your Bignalytics Account Has Been Approved!' 
+      : 'Update regarding your Bignalytics Registration';
 
+    let emailHtml = action === 'approved' ? `
+      <div style="font-family: sans-serif; max-width: 500px; padding: 20px; color: #111;">
+        <h2>Application Approved!</h2>
+        <p>Hi <strong>${studentName}</strong>,</p>
+        <p>Your account registration request for Bignalytics has been approved.</p>
+        <p>You can now go back to the platform and log in directly using your <strong>username and password</strong>.</p>
+      </div>
+    ` : `
+      <div style="font-family: sans-serif; max-width: 500px; padding: 20px; color: #111;">
+        <h2>Registration Update</h2>
+        <p>Hi <strong>${studentName}</strong>,</p>
+        <p>Your account registration request has been declined at this time.</p>
+      </div>
+    `;
+
+    // 3. Dispatch Notification via Resend
     if (process.env.RESEND_API_KEY) {
+      const resend = new Resend(process.env.RESEND_API_KEY);
       await resend.emails.send({
         from: 'Bignalytics <onboarding@resend.dev>',
-        to: studentEmail,
+        to: studentEmail, // NOTE: Free Resend keys can only send to YOUR own account email address!
         subject: emailSubject,
         html: emailHtml,
       });
     }
 
-    return NextResponse.json({ success: true, message: 'Notification email task processed successfully.' });
+    return NextResponse.json({ success: true });
 
   } catch (error: any) {
-    console.error('Email pipeline route exception:', error);
-    return NextResponse.json({ error: 'Internal layout processing exception.' }, { status: 500 });
+    console.error('Unified admin runtime exception:', error);
+    return NextResponse.json({ error: 'Internal layout processing crash.' }, { status: 500 });
   }
 }
