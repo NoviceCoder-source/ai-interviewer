@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from './lib/supabase'; // Adjust path if necessary to match your layout folder tree
+import { supabase } from './lib/supabase'; // Using your verified folder-level path layout
 
 export default function Home() {
   const router = useRouter();
@@ -19,15 +19,34 @@ export default function Home() {
   const [username, setUsername] = useState('');
   const [contact, setContact] = useState('');
 
-  // ── Handle Login Flow ─────────────────────────────────────────────────────
+  // ── True Username Login Processing ────────────────────────────────────────
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setErrorMessage('');
 
     try {
+      let loginEmail = username; // Default to what was typed in the box
+
+      // If the user didn't type a classic email string, assume it's a username lookup request
+      if (!username.includes('@')) {
+        const { data: profileLookup, error: lookupError } = await supabase
+          .from('profiles')
+          .select('email')
+          .eq('username', username)
+          .single();
+
+        if (lookupError || !profileLookup) {
+          setErrorMessage('No profile found matching that username.');
+          setLoading(false);
+          return;
+        }
+        loginEmail = profileLookup.email; // Extracted email handle
+      }
+
+      // Authenticate via Supabase identity system using resolved email profile
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email,
+        email: loginEmail,
         password,
       });
 
@@ -38,7 +57,6 @@ export default function Home() {
       }
 
       if (authData?.user) {
-        // Query profile metadata table to check authorization status gates
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
           .select('role, status')
@@ -46,19 +64,19 @@ export default function Home() {
           .single();
 
         if (profileError || !profile) {
-          setErrorMessage('Failed to fetch user profile mapping.');
+          setErrorMessage('Failed to fetch account status authorization.');
           await supabase.auth.signOut();
           setLoading(false);
           return;
         }
 
-        // Admin Entry
+        // Admin Entry Route
         if (profile.role === 'admin') {
           router.push('/admin/dashboard');
           return;
         }
 
-        // Student Gates
+        // Student Access Check Gateway
         if (profile.role === 'student') {
           if (profile.status === 'pending') {
             setErrorMessage('Your registration is currently awaiting administrative approval.');
@@ -67,7 +85,8 @@ export default function Home() {
             setErrorMessage('Your access request has been declined by administration.');
             await supabase.auth.signOut();
           } else {
-            router.push('/student/dashboard'); // Approved path
+            // 🚀 FIXED: Routes directly to your actual folder layout path
+            router.push('/dashboard'); 
           }
         }
       }
@@ -84,7 +103,6 @@ export default function Home() {
     setLoading(true);
     setErrorMessage('');
 
-    // 1. Client-side matching assertion for password fields
     if (password !== confirmPassword) {
       setErrorMessage('Passwords do not match. Please verify your entries.');
       setLoading(false);
@@ -92,7 +110,6 @@ export default function Home() {
     }
 
     try {
-      // 2. Dispatch data payload to your freshly updated API backend route
       const response = await fetch('/api/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -110,7 +127,6 @@ export default function Home() {
       if (!response.ok) {
         setErrorMessage(result.error || 'Registration failed.');
       } else {
-        // 3. Clear data out and flag successful setup view state
         setRegistrationSuccess(true);
         setEmail('');
         setPassword('');
@@ -130,7 +146,6 @@ export default function Home() {
     <div className="min-h-screen bg-[#0B132B] flex flex-col justify-center items-center p-6 text-white">
       <div className="w-full max-w-md bg-white/[0.02] backdrop-blur-md border border-white/5 rounded-2xl p-8 shadow-xl">
         
-        {/* Header Title Section */}
         <div className="text-center mb-8">
           <h1 className="text-3xl font-extrabold tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400">
             🔐 BIGNALYTICS
@@ -146,7 +161,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* Conditional Logic Toggle Render Views */}
         {registrationSuccess ? (
           <div className="text-center space-y-4 py-4">
             <div className="text-5xl">⏳</div>
@@ -163,7 +177,7 @@ export default function Home() {
           </div>
         ) : (
           <form onSubmit={isSignUp ? handleSignUp : handleLogin} className="space-y-4">
-            {isSignUp && (
+            {isSignUp ? (
               <>
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Full Name</label>
@@ -197,20 +211,31 @@ export default function Home() {
                     placeholder="9993348867"
                   />
                 </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Email Address</label>
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 transition-all text-white"
+                    placeholder="name@domain.com"
+                  />
+                </div>
               </>
+            ) : (
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Username or Email</label>
+                <input
+                  type="text"
+                  required
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 transition-all text-white"
+                  placeholder="sam_thomson or name@domain.com"
+                />
+              </div>
             )}
-
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Email Address</label>
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 transition-all text-white"
-                placeholder="name@domain.com"
-              />
-            </div>
 
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Password</label>
