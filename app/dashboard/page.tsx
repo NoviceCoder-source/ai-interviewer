@@ -1,49 +1,68 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { useRouter } from 'next/navigation';
-import { User } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
 
 export default function Dashboard() {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<any>(null);
   const [studentName, setStudentName] = useState('');
   const [loading, setLoading] = useState(true);
-  const router = useRouter();
 
   useEffect(() => {
     const verifyWorkspaceAccess = async () => {
       try {
+        // 1. Fetch current active auth session identity
         const { data: { user }, error: authError } = await supabase.auth.getUser();
         
         if (authError || !user) {
+          console.warn('Unauthorized session context.');
           window.location.replace('/');
           return;
         }
 
-        const { data: profile, error: profileError } = await supabase
+        // 2. Primary Scan: Search profile by User ID
+        let { data: profile, error: profileError } = await supabase
           .from('profiles')
           .select('full_name, role, status')
           .eq('id', user.id);
 
-        if (profileError || !profile || profile.length === 0) {
+        let currentProfile = profile && profile.length > 0 ? profile[0] : null;
+
+        // 🚀 CRITICAL RECOVERY FALLBACK:
+        // Agar dynamic id mapping completely miss ho jaye, toh user ke logged-in email se row match karo!
+        if (!currentProfile && user.email) {
+          const { data: backupProfile } = await supabase
+            .from('profiles')
+            .select('full_name, role, status')
+            .eq('email', user.email);
+
+          if (backupProfile && backupProfile.length > 0) {
+            currentProfile = backupProfile[0];
+          }
+        }
+
+        // 3. Absolute safety gate if no profile rows exist at all
+        if (!currentProfile) {
+          console.error('Identity sync error: Profile mismatch matrix.');
           await supabase.auth.signOut();
           window.location.replace('/');
           return;
         }
 
-        const currentProfile = profile[0];
-
+        // 4. Secure Authorization Routing
         if (currentProfile.role === 'student' && currentProfile.status === 'approved') {
           setUser(user);
           setStudentName(currentProfile.full_name || 'Student Workspace');
-          setLoading(false);
+          setLoading(false); // Render dashboard interface safely!
         } else {
+          console.warn('Profile authorization verification rejected.');
           await supabase.auth.signOut();
           window.location.replace('/');
         }
+
       } catch (err) {
+        console.error('Fatal execution exception inside dashboard router gate:', err);
         window.location.replace('/');
       }
     };
@@ -67,6 +86,8 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-[#0B132B] p-4 md:p-12 font-sans text-white">
       <div className="max-w-5xl mx-auto bg-white/[0.02] backdrop-blur-md rounded-[3rem] shadow-xl p-8 md:p-16 border border-white/5">
+        
+        {/* HEADER */}
         <header className="flex justify-between items-start mb-12">
           <div>
             <h1 className="text-4xl font-extrabold tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400 mb-2">
@@ -85,31 +106,21 @@ export default function Dashboard() {
           </button>
         </header>
 
+        {/* WORKSPACE CONTENT PANELS */}
         <div className="grid md:grid-cols-2 gap-8">
-          <div 
-            onClick={() => router.push('/dashboard/setup')}
-            className="cursor-pointer p-10 bg-white/[0.01] border-2 border-dashed border-white/10 rounded-[3rem] hover:border-indigo-400 hover:bg-indigo-500/[0.02] transition-all flex flex-col items-center justify-center text-center group"
-          >
-            <span className="text-5xl mb-6 group-hover:rotate-12 transition-transform">🎤</span>
+          <div className="p-10 bg-white/[0.01] border-2 border-dashed border-white/10 rounded-[3rem] flex flex-col items-center justify-center text-center">
+            <span className="text-5xl mb-6">🎤</span>
             <h3 className="text-white font-bold text-xl mb-2 uppercase tracking-wide">New Interview</h3>
-            <p className="text-gray-400 text-[10px] font-bold uppercase tracking-widest">Start a dynamic session</p>
+            <p className="text-gray-400 text-[10px] font-bold uppercase tracking-widest">System setup ready</p>
           </div>
 
-          <div 
-            onClick={() => router.push('/dashboard/review')}
-            className="cursor-pointer p-10 bg-white/[0.01] border-2 border-dashed border-white/10 rounded-[3rem] hover:border-purple-400 hover:bg-purple-500/[0.02] transition-all flex flex-col items-center justify-center text-center group"
-          >
-            <span className="text-5xl mb-6 group-hover:scale-110 transition-transform">📊</span>
+          <div className="p-10 bg-white/[0.01] border-2 border-dashed border-white/10 rounded-[3rem] flex flex-col items-center justify-center text-center">
+            <span className="text-5xl mb-6">📊</span>
             <h3 className="text-white font-bold text-xl mb-2 uppercase tracking-wide">Past Sessions</h3>
-            <p className="text-gray-400 text-[10px] font-bold uppercase tracking-widest">Review grades & feedback</p>
+            <p className="text-gray-400 text-[10px] font-bold uppercase tracking-widest">History records active</p>
           </div>
         </div>
 
-        <footer className="mt-16 text-center">
-          <p className="text-[9px] font-black uppercase tracking-[0.5em] text-gray-500">
-            V.2.0 // Active Virtual Environment
-          </p>
-        </footer>
       </div>
     </div>
   );
