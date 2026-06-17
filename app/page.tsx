@@ -9,7 +9,7 @@ export default function Home() {
   const [errorMessage, setErrorMessage] = useState('');
   const [registrationSuccess, setRegistrationSuccess] = useState(false);
 
-  // Core Form Binding Hooks
+  // Form Fields
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -31,7 +31,7 @@ export default function Home() {
         return;
       }
 
-      // Username standard matching logic
+      // Username Lookup Logic
       if (!loginEmail.includes('@')) {
         const { data: profiles, error: lookupError } = await supabase
           .from('profiles')
@@ -53,7 +53,7 @@ export default function Home() {
         loginEmail = profiles[0].email;
       }
 
-      // Authenticate via Supabase identity system
+      // Supabase Sign In
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: loginEmail,
         password: password,
@@ -79,16 +79,14 @@ export default function Home() {
           return;
         }
 
-        // Admin Redirect Block
+        // TURN OFF LOADING IMMEDIATELY TO UNFREEZE DOM
+        setLoading(false);
+
         if (profile.role === 'admin') {
-          setLoading(false);
-          setTimeout(() => {
-            window.location.assign('/admin/dashboard');
-          }, 50);
+          window.location.href = '/admin/dashboard';
           return;
         }
 
-        // Student Redirect Block
         if (profile.role === 'student') {
           if (profile.status === 'pending') {
             setErrorMessage('Your registration is currently awaiting administrative approval.');
@@ -97,18 +95,14 @@ export default function Home() {
             setErrorMessage('Your access request has been declined by administration.');
             await supabase.auth.signOut();
           } else {
-            // 🚀 RELEASE FREEZE TOGGLE FIRST THEN HARD SWITCH VIEWPORT
-            setLoading(false);
-            setTimeout(() => {
-              window.location.assign('/dashboard');
-            }, 50);
+            // 🚀 Direct standard browser navigation wrapper bypass
+            window.location.href = '/dashboard';
             return;
           }
         }
       }
     } catch (err: any) {
-      setErrorMessage(err.message || 'An unexpected authentication error occurred.');
-    } finally {
+      setErrorMessage(err.message || 'An unexpected error occurred.');
       setLoading(false);
     }
   };
@@ -119,7 +113,7 @@ export default function Home() {
     setErrorMessage('');
 
     if (password !== confirmPassword) {
-      setErrorMessage('Passwords do not match. Please verify your entries.');
+      setErrorMessage('Passwords do not match.');
       setLoading(false);
       return;
     }
@@ -160,33 +154,23 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-[#0B132B] flex flex-col justify-center items-center p-6 text-white">
       <div className="w-full max-w-md bg-white/[0.02] backdrop-blur-md border border-white/5 rounded-2xl p-8 shadow-xl">
-        
         <div className="text-center mb-8">
           <h1 className="text-3xl font-extrabold tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400">
             🔐 BIGNALYTICS
           </h1>
-          <p className="text-gray-400 text-xs mt-1">
-            {registrationSuccess ? 'Account Initialized' : isSignUp ? 'Create your platform profile credentials' : 'Sign in to access your dashboard system'}
-          </p>
+          <p className="text-gray-400 text-xs mt-1">Sign in to access your dashboard system</p>
         </div>
 
         {errorMessage && (
-          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-200 text-xs font-medium tracking-wide">
+          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-200 text-xs font-medium">
             ⚠️ {errorMessage}
           </div>
         )}
 
         {registrationSuccess ? (
           <div className="text-center space-y-4 py-4">
-            <div className="text-5xl">⏳</div>
-            <h2 className="text-lg font-bold text-amber-400">Awaiting Administrative Approval</h2>
-            <p className="text-gray-300 text-xs leading-relaxed max-w-xs mx-auto">
-              Your account has been registered successfully. Return to login once approved.
-            </p>
-            <button
-              onClick={() => { setRegistrationSuccess(false); setIsSignUp(false); }}
-              className="mt-4 w-full bg-indigo-500 hover:bg-indigo-600 font-bold py-3 rounded-xl text-sm transition-all shadow-lg"
-            >
+            <h2 className="text-lg font-bold text-amber-400">Awaiting Approval</h2>
+            <button onClick={() => { setRegistrationSuccess(false); setIsSignUp(false); }} className="w-full bg-indigo-500 py-3 rounded-xl text-sm font-bold">
               Return to Login
             </button>
           </div>
@@ -195,97 +179,39 @@ export default function Home() {
             {isSignUp && (
               <>
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Full Name</label>
-                  <input
-                    type="text"
-                    required
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 text-white"
-                    placeholder="Sam Thomson"
-                  />
+                  <label className="block text-xs text-gray-400 mb-1">Full Name</label>
+                  <input type="text" required value={fullName} onChange={(e) => setFullName(e.target.value)} className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm text-white" />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Contact Number (Optional)</label>
-                  <input
-                    type="text"
-                    value={contact}
-                    onChange={(e) => setContact(e.target.value)}
-                    className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 text-white"
-                    placeholder="9993348867"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Email Address</label>
-                  <input
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 text-white"
-                    placeholder="name@domain.com"
-                  />
+                  <label className="block text-xs text-gray-400 mb-1">Email Address</label>
+                  <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm text-white" />
                 </div>
               </>
             )}
 
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
-                {isSignUp ? 'Username' : 'Username or Email'}
-              </label>
-              <input
-                type="text"
-                required
-                value={usernameInput}
-                onChange={(e) => setUsernameInput(e.target.value)}
-                className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 text-white"
-                placeholder="sam_thomson"
-              />
+              <label className="block text-xs text-gray-400 mb-1">Username or Email</label>
+              <input type="text" required value={usernameInput} onChange={(e) => setUsernameInput(e.target.value)} className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm text-white" placeholder="sam_thomson" />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Password</label>
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 text-white"
-                placeholder="••••••••"
-              />
+              <label className="block text-xs text-gray-400 mb-1">Password</label>
+              <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm text-white" />
             </div>
 
             {isSignUp && (
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Confirm Password</label>
-                <input
-                  type="password"
-                  required
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 text-white"
-                  placeholder="••••••••"
-                />
+                <label className="block text-xs text-gray-400 mb-1">Confirm Password</label>
+                <input type="password" required value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm text-white" />
               </div>
             )}
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-500/50 text-white font-bold py-3 rounded-xl text-sm transition-all shadow-lg mt-6"
-            >
-              {loading ? 'Processing Transaction...' : isSignUp ? 'Submit Registration' : 'Authenticate Session'}
+            <button type="submit" disabled={loading} className="w-full bg-indigo-500 disabled:bg-indigo-500/50 text-white font-bold py-3 rounded-xl text-sm mt-6">
+              {loading ? 'Processing...' : isSignUp ? 'Submit Registration' : 'Authenticate Session'}
             </button>
 
-            <div className="text-center mt-6">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsSignUp(!isSignUp);
-                  setErrorMessage('');
-                }}
-                className="text-xs font-medium text-indigo-400 hover:text-indigo-300 transition-all underline underline-offset-4"
-              >
+            <div className="text-center mt-4">
+              <button type="button" onClick={() => { setIsSignUp(!isSignUp); setErrorMessage(''); }} className="text-xs text-indigo-400 underline">
                 {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
               </button>
             </div>
