@@ -1,9 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { supabase } from './lib/supabase'; // Using your verified folder-level path layout
+import { useRouter } from 'next/navigation';
+import { supabase } from './lib/supabase';
 
 export default function Home() {
+  const router = useRouter();
   const [isSignUp, setIsSignUp] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -14,7 +16,7 @@ export default function Home() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [fullName, setFullName] = useState('');
-  const [username, setUsername] = useState('');
+  const [usernameInput, setUsernameInput] = useState(''); // Separate handling to prevent name collisions
   const [contact, setContact] = useState('');
 
   // ── True Username Login Processing ────────────────────────────────────────
@@ -24,22 +26,28 @@ export default function Home() {
     setErrorMessage('');
 
     try {
-      let loginEmail = username; // Default to what was typed in the box
+      let loginEmail = usernameInput.trim();
+
+      if (!loginEmail) {
+        setErrorMessage('Please enter your username or email address.');
+        setLoading(false);
+        return;
+      }
 
       // If the user didn't type a classic email string, assume it's a username lookup request
-      if (!username.includes('@')) {
+      if (!loginEmail.includes('@')) {
         const { data: profiles, error: lookupError } = await supabase
           .from('profiles')
           .select('email')
-          .eq('username', username);
+          .eq('username', loginEmail);
 
         if (lookupError) {
+          alert(`Database Lookup Error: ${lookupError.message}`);
           setErrorMessage(`Database lookup error: ${lookupError.message}`);
           setLoading(false);
           return;
         }
 
-        // Check if the array returned empty
         if (!profiles || profiles.length === 0) {
           setErrorMessage('No profile found matching that username. Please sign up or verify spelling.');
           setLoading(false);
@@ -49,10 +57,10 @@ export default function Home() {
         loginEmail = profiles[0].email; // Safely pull the email out of the first match
       }
 
-      // Authenticate via Supabase identity system using resolved email profile
+      // Authenticate via Supabase identity system
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: loginEmail,
-        password,
+        password: password,
       });
 
       if (authError) {
@@ -75,7 +83,7 @@ export default function Home() {
           return;
         }
 
-        // Admin Entry Route - Hard global redirect to smash viewport locks
+        // Admin Entry Route
         if (profile.role === 'admin') {
           window.location.href = '/admin/dashboard';
           return;
@@ -90,14 +98,15 @@ export default function Home() {
             setErrorMessage('Your access request has been declined by administration.');
             await supabase.auth.signOut();
           } else {
-            // 🚀 FIXED: Hard window redirect to instantly dump login DOM state and force render /dashboard
+            // Hard relocate to clear viewport cache instantly
             window.location.href = '/dashboard'; 
             return;
           }
         }
       }
     } catch (err: any) {
-      console.error('Authentication process exception error details:', err);
+      console.error('Authentication runtime loop exception:', err);
+      alert(`Runtime Exception Error: ${err.message || err}`);
       setErrorMessage(err.message || 'An unexpected authentication error occurred.');
     } finally {
       setLoading(false);
@@ -121,11 +130,11 @@ export default function Home() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email,
+          email: email.trim(),
           password,
-          fullName,
-          username,
-          contact: contact || null,
+          fullName: fullName.trim(),
+          username: usernameInput.trim(),
+          contact: contact.trim() || null,
         }),
       });
 
@@ -139,7 +148,7 @@ export default function Home() {
         setPassword('');
         setConfirmPassword('');
         setFullName('');
-        setUsername('');
+        setUsernameInput('');
         setContact('');
       }
     } catch (err) {
@@ -173,7 +182,7 @@ export default function Home() {
             <div className="text-5xl">⏳</div>
             <h2 className="text-lg font-bold text-amber-400">Awaiting Administrative Approval</h2>
             <p className="text-gray-300 text-xs leading-relaxed max-w-xs mx-auto">
-              Your account has been registered successfully. You will receive a notification email once an admin evaluates and activates your profile access.
+              Your account has been registered successfully. You will receive a notification email once an admin activates your profile access.
             </p>
             <button
               onClick={() => { setRegistrationSuccess(false); setIsSignUp(false); }}
@@ -202,8 +211,8 @@ export default function Home() {
                   <input
                     type="text"
                     required
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
+                    value={usernameInput}
+                    onChange={(e) => setUsernameInput(e.target.value)}
                     className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 transition-all text-white"
                     placeholder="sam_thomson"
                   />
@@ -236,8 +245,8 @@ export default function Home() {
                 <input
                   type="text"
                   required
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  value={usernameInput}
+                  onChange={(e) => setUsernameInput(e.target.value)}
                   className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 transition-all text-white"
                   placeholder="sam_thomson or name@domain.com"
                 />
@@ -263,7 +272,7 @@ export default function Home() {
                   type="password"
                   required
                   value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  onChange={(e) => setPassword(e.target.value)}
                   className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 transition-all text-white"
                   placeholder="••••••••"
                 />
