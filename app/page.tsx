@@ -30,18 +30,26 @@ export default function Home() {
 
       // If the user didn't type a classic email string, assume it's a username lookup request
       if (!username.includes('@')) {
-        const { data: profileLookup, error: lookupError } = await supabase
+        // 🚀 FIXED: Replaced .single() with a safe data array check to prevent 406 crashes
+        const { data: profiles, error: lookupError } = await supabase
           .from('profiles')
           .select('email')
-          .eq('username', username)
-          .single();
+          .eq('username', username);
 
-        if (lookupError || !profileLookup) {
-          setErrorMessage('No profile found matching that username.');
+        if (lookupError) {
+          setErrorMessage(`Database lookup error: ${lookupError.message}`);
           setLoading(false);
           return;
         }
-        loginEmail = profileLookup.email; // Extracted email handle
+
+        // Check if the array returned empty
+        if (!profiles || profiles.length === 0) {
+          setErrorMessage('No profile found matching that username. Please sign up or verify spelling.');
+          setLoading(false);
+          return;
+        }
+
+        loginEmail = profiles[0].email; // Safely pull the email out of the first match
       }
 
       // Authenticate via Supabase identity system using resolved email profile
@@ -85,13 +93,14 @@ export default function Home() {
             setErrorMessage('Your access request has been declined by administration.');
             await supabase.auth.signOut();
           } else {
-            // 🚀 FIXED: Routes directly to your actual folder layout path
+            // 🚀 FIXED: Routes directly to your actual folder layout path matching app/dashboard
             router.push('/dashboard'); 
           }
         }
       }
-    } catch (err) {
-      setErrorMessage('An unexpected authentication error occurred.');
+    } catch (err: any) {
+      console.error('Authentication process exception error details:', err);
+      setErrorMessage(err.message || 'An unexpected authentication error occurred.');
     } finally {
       setLoading(false);
     }
