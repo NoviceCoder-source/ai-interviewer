@@ -24,6 +24,7 @@ export default function Home() {
 
     try {
       let loginEmail = usernameInput.trim();
+      let inputUsername = usernameInput.trim();
 
       if (!loginEmail) {
         setErrorMessage('Please enter your username or email address.');
@@ -31,7 +32,7 @@ export default function Home() {
         return;
       }
 
-      // Username Lookup Logic
+      // 1. Resolve Email if Username is provided
       if (!loginEmail.includes('@')) {
         const { data: profiles, error: lookupError } = await supabase
           .from('profiles')
@@ -53,7 +54,7 @@ export default function Home() {
         loginEmail = profiles[0].email;
       }
 
-      // Supabase Sign In
+      // 2. Authenticate session via Supabase Identity System
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: loginEmail,
         password: password,
@@ -66,27 +67,42 @@ export default function Home() {
       }
 
       if (authData?.user) {
-        const { data: profile, error: profileError } = await supabase
+        // 🚀 BULLETPROOF SECURITY GATEWAY FIX:
+        // Pehle direct authenticated User ID se profile dhoodho, agar link mismatch ki wajah se row na mile, 
+        // toh backup me direct email string se query match karo taaki koi user login screen par freeze na ho!
+        let { data: profile, error: profileError } = await supabase
           .from('profiles')
           .select('role, status')
           .eq('id', authData.user.id)
-          .single();
+          .maybeSingle(); // Generates empty cell array instead of crashing on 406/400 errors
 
-        if (profileError || !profile) {
-          setErrorMessage('Failed to fetch account status authorization.');
+        if (!profile) {
+          // Backup query via profile email match tracking fallback
+          const { data: backupProfile } = await supabase
+            .from('profiles')
+            .select('role, status')
+            .eq('email', loginEmail)
+            .maybeSingle();
+            
+          profile = backupProfile;
+        }
+
+        if (!profile) {
+          setErrorMessage('Account identity mapping sync failure. Access token dropped.');
           await supabase.auth.signOut();
           setLoading(false);
           return;
         }
 
-        // TURN OFF LOADING IMMEDIATELY TO UNFREEZE DOM
         setLoading(false);
 
+        // Admin Access Route
         if (profile.role === 'admin') {
           window.location.href = '/admin/dashboard';
           return;
         }
 
+        // Student Access Route
         if (profile.role === 'student') {
           if (profile.status === 'pending') {
             setErrorMessage('Your registration is currently awaiting administrative approval.');
@@ -95,7 +111,7 @@ export default function Home() {
             setErrorMessage('Your access request has been declined by administration.');
             await supabase.auth.signOut();
           } else {
-            // 🚀 Direct standard browser navigation wrapper bypass
+            // Unlocks view context cleanly
             window.location.href = '/dashboard';
             return;
           }
