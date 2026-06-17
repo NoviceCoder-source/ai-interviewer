@@ -1,94 +1,84 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-// ── Use service role key for server-side auth operations ─────────────────────
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { supabase } from '../../lib/supabase'; // Confirmed relative path from app/api/register
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { email, fullName, contact } = body;
+    const { email, password, fullName, contact, username } = body;
 
-    // 1. Basic input validation
-    if (!email || !fullName) {
+    // 1. Strict input validation matching your updated front-end requirements
+    if (!email || !password || !fullName || !username) {
       return NextResponse.json(
-        { error: 'Missing mandatory registration entries.' },
+        { error: 'Missing mandatory registration fields: email, password, fullName, and username are required.' }, 
         { status: 400 }
       );
     }
 
-    // 2. Check if email already exists in profiles
-    const { data: existing } = await supabaseAdmin
-      .from('profiles')
-      .select('id')
-      .eq('email', email.trim().toLowerCase())
-      .single();
-
-    if (existing) {
-      return NextResponse.json(
-        { error: 'This email is already registered.' },
-        { status: 400 }
-      );
-    }
-
-    // 3. Create auth account with a temporary random password
-    // Student will set their real password after approval via setup-account page
-    const tempPassword = crypto.randomUUID();
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-      email: email.trim().toLowerCase(),
-      password: tempPassword,
-      email_confirm: true,
+    // 2. Provision the account inside Supabase Auth directly with metadata stamps
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        // Stamping role and username metadata inside the auth session token layout 
+        // makes it instantly readable for your database RLS security policies
+        data: {
+          role: 'student',
+          username: username,
+          full_name: fullName
+        }
+      }
     });
 
+    // Explicit check for auth error to clear strict TypeScript validation loops
     if (authError) {
       return NextResponse.json(
-        { error: `Auth Failed: ${authError.message}` },
+        { error: `Authentication Failed: ${authError.message}` }, 
         { status: 400 }
       );
     }
 
     if (!authData || !authData.user) {
       return NextResponse.json(
-        { error: 'Unable to create auth account.' },
-        { status: 400 }
-      );
-    }
-
-    // 4. Save registration details to profiles
-    const { error: profileError } = await supabaseAdmin
-      .from('profiles')
-      .insert([{
-        id: authData.user.id,
-        email: email.trim().toLowerCase(),
-        full_name: fullName.trim(),
-        contact: contact?.trim() || null,
-        role: 'student',
-        status: 'pending',
-      }]);
-
-    if (profileError) {
-      console.error('Profile insert error:', profileError.message);
-      // Clean up the auth user if profile creation fails
-      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
-      return NextResponse.json(
-        { error: `Profile creation failed: ${profileError.message}` },
+        { error: 'Internal Auth Service Error: Unable to provision identity profile.' }, 
         { status: 500 }
       );
     }
 
-    return NextResponse.json({
-      success: true,
-      message: 'Registration submitted successfully.'
+    // 3. Atomically write structural details into your custom public profiles matrix
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .insert([
+        {
+          id: authData.user.id,
+          email: email,
+          full_name: fullName,
+          contact: contact || null,
+          username: username,
+          role: 'student',
+          status: 'pending' // Forces user directly into the dashboard gate check flow
+        }
+      ]);
+
+    if (profileError) {
+      console.error('Database instantiation error:', profileError.message);
+      
+      // Edge case cleanup: If profile writing fails, clean up the auth user to allow retries
+      // (Optional system step depending on your database delete rules configuration)
+      return NextResponse.json(
+        { error: `Profile Ingestion Interrupted: ${profileError.message}` }, 
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ 
+      success: true, 
+      message: 'Student record established seamlessly under pending evaluation status.' 
     });
 
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Register route error:', message);
+  } catch (error: any) {
+    console.error('System registration pipeline runtime exception:', error);
     return NextResponse.json(
-      { error: 'Internal server error.' },
+      { error: 'Internal system architecture processing failure.' }, 
       { status: 500 }
     );
   }

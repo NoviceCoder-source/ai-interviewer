@@ -1,253 +1,265 @@
 'use client';
+
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from './lib/supabase';
-
-type Mode = 'login' | 'register';
+import { supabase } from './lib/supabase'; // Adjust path if necessary to match your layout folder tree
 
 export default function Home() {
   const router = useRouter();
-  const [mode, setMode] = useState<Mode>('login');
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [registrationSuccess, setRegistrationSuccess] = useState(false);
 
-  // Login states
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [loginError, setLoginError] = useState('');
-  const [loginLoading, setLoginLoading] = useState(false);
-
-  // Register states
-  const [fullName, setFullName] = useState('');
-  const [contact, setContact] = useState('');
+  // Form Field States
   const [email, setEmail] = useState('');
-  const [registerError, setRegisterError] = useState('');
-  const [registerLoading, setRegisterLoading] = useState(false);
-  const [registerSuccess, setRegisterSuccess] = useState(false);
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [username, setUsername] = useState('');
+  const [contact, setContact] = useState('');
 
-  // ── Login Handler ──────────────────────────────────────────────────────────
+  // ── Handle Login Flow ─────────────────────────────────────────────────────
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoginError('');
-    setLoginLoading(true);
+    setLoading(true);
+    setErrorMessage('');
 
     try {
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('email, status, role')
-        .eq('username', username.trim())
-        .single();
-
-      if (profileError || !profile) {
-        setLoginError('Username not found. Please check your username.');
-        return;
-      }
-
-      if (profile.status === 'pending') {
-        setLoginError('Your account is still pending approval.');
-        return;
-      }
-
-      if (profile.status === 'rejected') {
-        setLoginError('Your account has been rejected. Please contact Bignalytics.');
-        return;
-      }
-
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: profile.email,
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email,
         password,
       });
 
-      if (signInError) {
-        setLoginError('Incorrect password. Please try again.');
+      if (authError) {
+        setErrorMessage(authError.message);
+        setLoading(false);
         return;
       }
 
-      if (profile.role === 'admin') {
-        router.push('/admin/dashboard');
-      } else {
-        router.push('/dashboard');
-      }
+      if (authData?.user) {
+        // Query profile metadata table to check authorization status gates
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('role, status')
+          .eq('id', authData.user.id)
+          .single();
 
+        if (profileError || !profile) {
+          setErrorMessage('Failed to fetch user profile mapping.');
+          await supabase.auth.signOut();
+          setLoading(false);
+          return;
+        }
+
+        // Admin Entry
+        if (profile.role === 'admin') {
+          router.push('/admin/dashboard');
+          return;
+        }
+
+        // Student Gates
+        if (profile.role === 'student') {
+          if (profile.status === 'pending') {
+            setErrorMessage('Your registration is currently awaiting administrative approval.');
+            await supabase.auth.signOut();
+          } else if (profile.status === 'rejected') {
+            setErrorMessage('Your access request has been declined by administration.');
+            await supabase.auth.signOut();
+          } else {
+            router.push('/student/dashboard'); // Approved path
+          }
+        }
+      }
     } catch (err) {
-      console.error('Login processing crash:', err);
-      setLoginError('Something went wrong. Please try again.');
+      setErrorMessage('An unexpected authentication error occurred.');
     } finally {
-      setLoginLoading(false);
+      setLoading(false);
     }
   };
 
-  // ── Safe Server-Side Register Handler ──────────────────────────────────────
-  const handleRegister = async (e: React.FormEvent) => {
+  // ── Handle Registration Pipeline Flow ─────────────────────────────────────
+  const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-    setRegisterError('');
-    setRegisterLoading(true);
+    setLoading(true);
+    setErrorMessage('');
+
+    // 1. Client-side matching assertion for password fields
+    if (password !== confirmPassword) {
+      setErrorMessage('Passwords do not match. Please verify your entries.');
+      setLoading(false);
+      return;
+    }
 
     try {
-      const res = await fetch('/api/register', {
+      // 2. Dispatch data payload to your freshly updated API backend route
+      const response = await fetch('/api/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fullName, contact, email }),
+        body: JSON.stringify({
+          email,
+          password,
+          fullName,
+          username,
+          contact: contact || null,
+        }),
       });
 
-      const data = await res.json();
+      const result = await response.json();
 
-      if (!res.ok) {
-        setRegisterError(data.error || 'Registration failed.');
-        return;
+      if (!response.ok) {
+        setErrorMessage(result.error || 'Registration failed.');
+      } else {
+        // 3. Clear data out and flag successful setup view state
+        setRegistrationSuccess(true);
+        setEmail('');
+        setPassword('');
+        setConfirmPassword('');
+        setFullName('');
+        setUsername('');
+        setContact('');
       }
-
-      setRegisterSuccess(true);
-
     } catch (err) {
-      console.error('Registration post error:', err);
-      setRegisterError('Something went wrong. Please try again.');
+      setErrorMessage('Unable to connect to registration servers.');
     } finally {
-      setRegisterLoading(false);
+      setLoading(false);
     }
   };
 
-  if (registerSuccess) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 p-4">
-        <div className="bg-white/10 backdrop-blur-lg p-10 rounded-2xl shadow-2xl border border-white/20 w-full max-w-sm text-center">
-          <div className="text-5xl mb-4">✅</div>
-          <h1 className="text-2xl font-extrabold text-white mb-2">Request Submitted!</h1>
-          <p className="text-indigo-100 text-sm font-medium">
-            Your registration request has been sent to Bignalytics staff for approval.
-            You will receive an email once your account is approved.
-          </p>
-          <button
-            onClick={() => { setRegisterSuccess(false); setMode('login'); }}
-            className="mt-6 w-full bg-white text-indigo-600 font-bold py-3 px-4 rounded-xl hover:scale-105 transition-all"
-          >
-            Back to Login
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 p-4">
-      <div className="bg-white/10 backdrop-blur-lg p-10 rounded-2xl shadow-2xl border border-white/20 w-full max-w-sm">
-
+    <div className="min-h-screen bg-[#0B132B] flex flex-col justify-center items-center p-6 text-white">
+      <div className="w-full max-w-md bg-white/[0.02] backdrop-blur-md border border-white/5 rounded-2xl p-8 shadow-xl">
+        
+        {/* Header Title Section */}
         <div className="text-center mb-8">
-          <div className="text-5xl mb-3">🎓</div>
-          <h1 className="text-3xl font-extrabold text-white">Bignalytics</h1>
-          <p className="text-indigo-100 text-sm font-medium mt-1">AI Interview Practice Platform</p>
+          <h1 className="text-3xl font-extrabold tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400">
+            🔐 BIGNALYTICS
+          </h1>
+          <p className="text-gray-400 text-xs mt-1">
+            {registrationSuccess ? 'Account Initialized' : isSignUp ? 'Create your platform profile credentials' : 'Sign in to access your dashboard system'}
+          </p>
         </div>
 
-        <div className="flex rounded-xl border border-white/20 overflow-hidden mb-8">
-          <button
-            onClick={() => { setMode('login'); setLoginError(''); }}
-            className={`flex-1 py-3 text-sm font-bold transition-all ${
-              mode === 'login' ? 'bg-white text-indigo-600' : 'bg-transparent text-white hover:bg-white/10'
-            }`}
-          >
-            Login
-          </button>
-          <button
-            onClick={() => { setMode('register'); setRegisterError(''); }}
-            className={`flex-1 py-3 text-sm font-bold transition-all ${
-              mode === 'register' ? 'bg-white text-indigo-600' : 'bg-transparent text-white hover:bg-white/10'
-            }`}
-          >
-            Register
-          </button>
-        </div>
-
-        {mode === 'login' && (
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="block text-white text-sm font-bold mb-1">Username</label>
-              <input
-                type="text"
-                required
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Enter your username"
-                className="w-full bg-white/20 text-white placeholder-white/50 border border-white/30 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-white/50"
-              />
-            </div>
-            <div>
-              <label className="block text-white text-sm font-bold mb-1">Password</label>
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter your password"
-                className="w-full bg-white/20 text-white placeholder-white/50 border border-white/30 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-white/50"
-              />
-            </div>
-
-            {loginError && (
-              <p className="text-red-200 text-xs font-bold bg-red-500/20 px-3 py-2 rounded-lg">
-                ⚠️ {loginError}
-              </p>
-            )}
-
-            <button
-              type="submit"
-              disabled={loginLoading}
-              className="w-full bg-white text-indigo-600 font-bold py-3 px-4 rounded-xl shadow-md hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loginLoading ? 'Logging in...' : 'Login'}
-            </button>
-          </form>
+        {errorMessage && (
+          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-200 text-xs font-medium tracking-wide">
+            ⚠️ {errorMessage}
+          </div>
         )}
 
-        {mode === 'register' && (
-          <form onSubmit={handleRegister} className="space-y-4">
+        {/* Conditional Logic Toggle Render Views */}
+        {registrationSuccess ? (
+          <div className="text-center space-y-4 py-4">
+            <div className="text-5xl">⏳</div>
+            <h2 className="text-lg font-bold text-amber-400">Awaiting Administrative Approval</h2>
+            <p className="text-gray-300 text-xs leading-relaxed max-w-xs mx-auto">
+              Your account has been registered successfully. You will receive a notification email once an admin evaluates and activates your profile access.
+            </p>
+            <button
+              onClick={() => { setRegistrationSuccess(false); setIsSignUp(false); }}
+              className="mt-4 w-full bg-indigo-500 hover:bg-indigo-600 font-bold py-3 rounded-xl text-sm transition-all shadow-lg shadow-indigo-500/20"
+            >
+              Return to Login
+            </button>
+          </div>
+        ) : (
+          <form onSubmit={isSignUp ? handleSignUp : handleLogin} className="space-y-4">
+            {isSignUp && (
+              <>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Full Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 transition-all text-white"
+                    placeholder="Sam Thomson"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Username</label>
+                  <input
+                    type="text"
+                    required
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 transition-all text-white"
+                    placeholder="sam_thomson"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Contact Number (Optional)</label>
+                  <input
+                    type="text"
+                    value={contact}
+                    onChange={(e) => setContact(e.target.value)}
+                    className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 transition-all text-white"
+                    placeholder="9993348867"
+                  />
+                </div>
+              </>
+            )}
+
             <div>
-              <label className="block text-white text-sm font-bold mb-1">Full Name</label>
-              <input
-                type="text"
-                required
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                placeholder="Enter your full name"
-                className="w-full bg-white/20 text-white placeholder-white/50 border border-white/30 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-white/50"
-              />
-            </div>
-            <div>
-              <label className="block text-white text-sm font-bold mb-1">Contact Number</label>
-              <input
-                type="tel"
-                required
-                value={contact}
-                onChange={(e) => setContact(e.target.value)}
-                placeholder="Enter your contact number"
-                className="w-full bg-white/20 text-white placeholder-white/50 border border-white/30 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-white/50"
-              />
-            </div>
-            <div>
-              <label className="block text-white text-sm font-bold mb-1">Email Address</label>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Email Address</label>
               <input
                 type="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="Enter your email"
-                className="w-full bg-white/20 text-white placeholder-white/50 border border-white/30 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-white/50"
+                className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 transition-all text-white"
+                placeholder="name@domain.com"
               />
             </div>
 
-            {registerError && (
-              <p className="text-red-200 text-xs font-bold bg-red-500/20 px-3 py-2 rounded-lg">
-                ⚠️ {registerError}
-              </p>
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Password</label>
+              <input
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 transition-all text-white"
+                placeholder="••••••••"
+              />
+            </div>
+
+            {isSignUp && (
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Confirm Password</label>
+                <input
+                  type="password"
+                  required
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-400 transition-all text-white"
+                  placeholder="••••••••"
+                />
+              </div>
             )}
 
             <button
               type="submit"
-              disabled={registerLoading}
-              className="w-full bg-white text-indigo-600 font-bold py-3 px-4 rounded-xl shadow-md hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={loading}
+              className="w-full bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-500/50 text-white font-bold py-3 rounded-xl text-sm transition-all shadow-lg shadow-indigo-500/20 mt-6"
             >
-              {registerLoading ? 'Submitting...' : 'Submit Registration'}
+              {loading ? 'Processing Transaction...' : isSignUp ? 'Submit Registration' : 'Authenticate Session'}
             </button>
+
+            <div className="text-center mt-6">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsSignUp(!isSignUp);
+                  setErrorMessage('');
+                }}
+                className="text-xs font-medium text-indigo-400 hover:text-indigo-300 transition-all underline decoration-indigo-500/30 underline-offset-4"
+              >
+                {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
+              </button>
+            </div>
           </form>
         )}
-
       </div>
     </div>
   );

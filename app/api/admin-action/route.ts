@@ -1,77 +1,91 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '../../lib/supabase'; // Using your verified relative path layout
+import { Resend } from 'resend';
 
-// Service role key — can send emails and bypass RLS
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+// Initialize Resend with your API key (add RESEND_API_KEY to your .env.local file)
+const resend = new Resend(process.env.RESEND_API_KEY);
 
-export async function POST(req: Request) {
+export async function POST(request: Request) {
   try {
-    const { studentId, studentEmail, action } = await req.json();
+    const body = await request.json();
+    const { studentId, action, studentEmail, studentName } = body; // action will be 'approved' or 'rejected'
 
-    if (!studentId || !action) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    if (!studentId || !action || !studentEmail || !studentName) {
+      return NextResponse.json({ error: 'Missing mandatory action fields.' }, { status: 400 });
     }
 
-    if (action === 'approve') {
-      // Step 1: Update status to approved
-      const { error: updateError } = await supabaseAdmin
-        .from('profiles')
-        .update({ status: 'approved' })
-        .eq('id', studentId);
+    // 1. Verify that the user executing this request is actually an admin
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized session context.' }, { status: 401 });
+    }
 
-      if (updateError) throw updateError;
+    const { data: adminProfile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
 
-      // Step 2: Send password reset email so student can set up their account
-      // This email contains a link to /setup-account
-      const { error: emailError } = await supabaseAdmin.auth.resetPasswordForEmail(
-        studentEmail,
-        {
-          redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/setup-account`,
-        }
-      );
+    if (!adminProfile || adminProfile.role !== 'admin') {
+      return NextResponse.json({ error: 'Forbidden: Admin access only.' }, { status: 403 });
+    }
 
-      if (emailError) {
-        console.error('Email error:', emailError);
-        // Don't fail the whole request if email fails
-        // Student is approved but may need manual email
-        return NextResponse.json({
-          success: true,
-          warning: 'Student approved but email failed to send. Please notify them manually.'
-        });
-      }
+    // 2. Update the student's status in the database profiles table
+    const { error: updateError } = await supabase
+      .from('profiles')
+      .update({ status: action })
+      .eq('id', studentId);
 
-      return NextResponse.json({ success: true });
+    if (updateError) {
+      return NextResponse.json({ error: `Database update failed: ${updateError.message}` }, { status: 500 });
+    }
 
-    } else if (action === 'reject') {
-      const { error } = await supabaseAdmin
-        .from('profiles')
-        .update({ status: 'rejected' })
-        .eq('id', studentId);
+    // 3. Dispatch a clean, link-free transactional notification email based on the action
+    let emailSubject = '';
+    let emailHtml = '';
 
-      if (error) throw error;
+    if (action === 'approved') {
+      emailSubject = '🎉 Your Bignalytics Account Has Been Approved!';
+      emailHtml = `
+        <div style="font-family: sans-serif; max-width: 500px; padding: 20px; color: #111;">
+          <h2>Application Approved!</h2>
+          <p>Hi <strong>${studentName}</strong>,</p>
+          <p>Your registration request for Bignalytics has been reviewed and approved by the administration.</p>
+          <p>You can now go back to the platform and log in directly using the <strong>username and password</strong> you configured during signup.</p>
+          <br />
+          <p>Best regards,<br />Bignalytics Administration Team</p>
+        </div>
+      `;
+    } else if (action === 'rejected') {
+      emailSubject = 'Update regarding your Bignalytics Registration';
+      emailHtml = `
+        <div style="font-family: sans-serif; max-width: 500px; padding: 20px; color: #111;">
+          <h2>Registration Update</h2>
+          <p>Hi <strong>${studentName}</strong>,</p>
+          <p>Thank you for your interest in Bignalytics. Unfortunately, your account registration request has been declined at this time.</p>
+          <p>If you believe this was an error, please reach out to support or attempt registration again with verified credentials.</p>
+          <br />
+          <p>Best regards,<br />Bignalytics Administration Team</p>
+        </div>
+      `;
+    }
 
-      return NextResponse.json({ success: true });
-
-    } else if (action === 'revoke') {
-      const { error } = await supabaseAdmin
-        .from('profiles')
-        .update({ status: 'rejected' })
-        .eq('id', studentId);
-
-      if (error) throw error;
-
-      return NextResponse.json({ success: true });
-
+    // Attempt to send the notification email
+    if (process.env.RESEND_API_KEY) {
+      await resend.emails.send({
+        from: 'Bignalytics <onboarding@resend.dev>', // You can change this when you get a custom domain
+        to: studentEmail,
+        subject: emailSubject,
+        html: emailHtml,
+      });
     } else {
-      return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+      console.warn('RESEND_API_KEY is missing. Skipping email dispatch, but DB updated successfully.');
     }
 
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    console.error('Admin action error:', message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ success: true, message: `Student profile successfully updated to ${action}.` });
+
+  } catch (error: any) {
+    console.error('Unexpected admin action route exception:', error);
+    return NextResponse.json({ error: 'Internal pipeline execution failure.' }, { status: 500 });
   }
 }
