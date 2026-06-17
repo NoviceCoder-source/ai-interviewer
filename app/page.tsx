@@ -1,238 +1,337 @@
 'use client';
-
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from './lib/supabase';
 
+type Mode = 'login' | 'register';
+
 export default function Home() {
-  const [isSignUp, setIsSignUp] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
-  const [registrationSuccess, setRegistrationSuccess] = useState(false);
+  const router = useRouter();
+  const [mode, setMode] = useState<Mode>('login');
 
-  // Form Fields
-  const [email, setEmail] = useState('');
+  // Login states
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [fullName, setFullName] = useState('');
-  const [usernameInput, setUsernameInput] = useState('');
-  const [contact, setContact] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [loginLoading, setLoginLoading] = useState(false);
 
+  // Register states
+  const [fullName, setFullName] = useState('');
+  const [contact, setContact] = useState('');
+  const [email, setEmail] = useState('');
+  const [regUsername, setRegUsername] = useState('');
+  const [regPassword, setRegPassword] = useState('');
+  const [regConfirmPassword, setRegConfirmPassword] = useState('');
+  const [registerError, setRegisterError] = useState('');
+  const [registerLoading, setRegisterLoading] = useState(false);
+  const [registerSuccess, setRegisterSuccess] = useState(false);
+
+  // ── Login Handler ──────────────────────────────────────────────────────────
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    setErrorMessage('');
+    setLoginError('');
+    setLoginLoading(true);
 
     try {
-      let loginEmail = usernameInput.trim();
-      let inputUsername = usernameInput.trim();
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('email, status, role')
+        .eq('username', username.trim().toLowerCase())
+        .single();
 
-      if (!loginEmail) {
-        setErrorMessage('Please enter your username or email address.');
-        setLoading(false);
+      if (profileError || !profile) {
+        setLoginError('Username not found. Please check your username.');
         return;
       }
 
-      // 1. Resolve Email if Username is provided
-      if (!loginEmail.includes('@')) {
-        const { data: profiles, error: lookupError } = await supabase
-          .from('profiles')
-          .select('email')
-          .eq('username', loginEmail);
-
-        if (lookupError) {
-          setErrorMessage(`Database lookup failure: ${lookupError.message}`);
-          setLoading(false);
-          return;
-        }
-
-        if (!profiles || profiles.length === 0) {
-          setErrorMessage('No profile found matching that username.');
-          setLoading(false);
-          return;
-        }
-
-        loginEmail = profiles[0].email;
+      if (profile.status === 'pending') {
+        setLoginError('Your account is still pending approval.');
+        return;
       }
 
-      // 2. Authenticate session via Supabase Identity System
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email: loginEmail,
-        password: password,
+      if (profile.status === 'rejected') {
+        setLoginError('Your account has been rejected. Please contact Bignalytics.');
+        return;
+      }
+
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: profile.email,
+        password,
       });
 
-      if (authError) {
-        setErrorMessage(authError.message);
-        setLoading(false);
+      if (signInError) {
+        setLoginError('Incorrect password. Please try again.');
         return;
       }
 
-      if (authData?.user) {
-        // 🚀 BULLETPROOF SECURITY GATEWAY FIX:
-        // Pehle direct authenticated User ID se profile dhoodho, agar link mismatch ki wajah se row na mile, 
-        // toh backup me direct email string se query match karo taaki koi user login screen par freeze na ho!
-        let { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('role, status')
-          .eq('id', authData.user.id)
-          .maybeSingle(); // Generates empty cell array instead of crashing on 406/400 errors
-
-        if (!profile) {
-          // Backup query via profile email match tracking fallback
-          const { data: backupProfile } = await supabase
-            .from('profiles')
-            .select('role, status')
-            .eq('email', loginEmail)
-            .maybeSingle();
-            
-          profile = backupProfile;
-        }
-
-        if (!profile) {
-          setErrorMessage('Account identity mapping sync failure. Access token dropped.');
-          await supabase.auth.signOut();
-          setLoading(false);
-          return;
-        }
-
-        setLoading(false);
-
-        // Admin Access Route
-        if (profile.role === 'admin') {
-          window.location.href = '/admin/dashboard';
-          return;
-        }
-
-        // Student Access Route
-        if (profile.role === 'student') {
-          if (profile.status === 'pending') {
-            setErrorMessage('Your registration is currently awaiting administrative approval.');
-            await supabase.auth.signOut();
-          } else if (profile.status === 'rejected') {
-            setErrorMessage('Your access request has been declined by administration.');
-            await supabase.auth.signOut();
-          } else {
-            // Unlocks view context cleanly
-            window.location.href = '/dashboard';
-            return;
-          }
-        }
+      if (profile.role === 'admin') {
+        router.push('/admin/dashboard');
+      } else {
+        router.push('/dashboard');
       }
-    } catch (err: any) {
-      setErrorMessage(err.message || 'An unexpected error occurred.');
-      setLoading(false);
+
+    } catch (err) {
+      console.error('Login error:', err);
+      setLoginError('Something went wrong. Please try again.');
+    } finally {
+      setLoginLoading(false);
     }
   };
 
-  const handleSignUp = async (e: React.FormEvent) => {
+  // ── Register Handler ───────────────────────────────────────────────────────
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    setErrorMessage('');
+    setRegisterError('');
 
-    if (password !== confirmPassword) {
-      setErrorMessage('Passwords do not match.');
-      setLoading(false);
+    // Validate username
+    if (regUsername.trim().length < 3) {
+      setRegisterError('Username must be at least 3 characters.');
       return;
     }
 
+    if (!/^[a-zA-Z0-9_]+$/.test(regUsername.trim())) {
+      setRegisterError('Username can only contain letters, numbers, and underscores.');
+      return;
+    }
+
+    // Validate password
+    if (regPassword.length < 8) {
+      setRegisterError('Password must be at least 8 characters.');
+      return;
+    }
+
+    if (regPassword !== regConfirmPassword) {
+      setRegisterError('Passwords do not match.');
+      return;
+    }
+
+    setRegisterLoading(true);
+
     try {
-      const response = await fetch('/api/register', {
+      const res = await fetch('/api/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: email.trim(),
-          password,
-          fullName: fullName.trim(),
-          username: usernameInput.trim(),
-          contact: contact.trim() || null,
+          fullName,
+          contact,
+          email,
+          username: regUsername.trim().toLowerCase(),
+          password: regPassword,
         }),
       });
 
-      const result = await response.json();
+      const data = await res.json();
 
-      if (!response.ok) {
-        setErrorMessage(result.error || 'Registration failed.');
-      } else {
-        setRegistrationSuccess(true);
-        setEmail('');
-        setPassword('');
-        setConfirmPassword('');
-        setFullName('');
-        setUsernameInput('');
-        setContact('');
+      if (!res.ok) {
+        setRegisterError(data.error || 'Registration failed.');
+        return;
       }
+
+      setRegisterSuccess(true);
+
     } catch (err) {
-      setErrorMessage('Unable to connect to registration servers.');
+      console.error('Registration error:', err);
+      setRegisterError('Something went wrong. Please try again.');
     } finally {
-      setLoading(false);
+      setRegisterLoading(false);
     }
   };
 
+  // ── Success Screen ─────────────────────────────────────────────────────────
+  if (registerSuccess) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 p-4">
+        <div className="bg-white/10 backdrop-blur-lg p-10 rounded-2xl shadow-2xl border border-white/20 w-full max-w-sm text-center">
+          <div className="text-5xl mb-4">✅</div>
+          <h1 className="text-2xl font-extrabold text-white mb-2">Registration Submitted!</h1>
+          <p className="text-indigo-100 text-sm font-medium">
+            Your registration has been sent to Bignalytics staff for approval.
+            You will receive an email once your account is approved or rejected.
+          </p>
+          <button
+            onClick={() => { setRegisterSuccess(false); setMode('login'); }}
+            className="mt-6 w-full bg-white text-indigo-600 font-bold py-3 px-4 rounded-xl hover:scale-105 transition-all"
+          >
+            Back to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-[#0B132B] flex flex-col justify-center items-center p-6 text-white">
-      <div className="w-full max-w-md bg-white/[0.02] backdrop-blur-md border border-white/5 rounded-2xl p-8 shadow-xl">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 p-4">
+      <div className="bg-white/10 backdrop-blur-lg p-10 rounded-2xl shadow-2xl border border-white/20 w-full max-w-sm">
+
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-extrabold tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400">
-            🔐 BIGNALYTICS
-          </h1>
-          <p className="text-gray-400 text-xs mt-1">Sign in to access your dashboard system</p>
+          <div className="text-5xl mb-3">🎓</div>
+          <h1 className="text-3xl font-extrabold text-white">Bignalytics</h1>
+          <p className="text-indigo-100 text-sm font-medium mt-1">AI Interview Practice Platform</p>
         </div>
 
-        {errorMessage && (
-          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-200 text-xs font-medium">
-            ⚠️ {errorMessage}
-          </div>
-        )}
+        {/* Mode Toggle */}
+        <div className="flex rounded-xl border border-white/20 overflow-hidden mb-8">
+          <button
+            onClick={() => { setMode('login'); setLoginError(''); }}
+            className={`flex-1 py-3 text-sm font-bold transition-all ${
+              mode === 'login' ? 'bg-white text-indigo-600' : 'bg-transparent text-white hover:bg-white/10'
+            }`}
+          >
+            Login
+          </button>
+          <button
+            onClick={() => { setMode('register'); setRegisterError(''); }}
+            className={`flex-1 py-3 text-sm font-bold transition-all ${
+              mode === 'register' ? 'bg-white text-indigo-600' : 'bg-transparent text-white hover:bg-white/10'
+            }`}
+          >
+            Register
+          </button>
+        </div>
 
-        {registrationSuccess ? (
-          <div className="text-center space-y-4 py-4">
-            <h2 className="text-lg font-bold text-amber-400">Awaiting Approval</h2>
-            <button onClick={() => { setRegistrationSuccess(false); setIsSignUp(false); }} className="w-full bg-indigo-500 py-3 rounded-xl text-sm font-bold">
-              Return to Login
-            </button>
-          </div>
-        ) : (
-          <form onSubmit={isSignUp ? handleSignUp : handleLogin} className="space-y-4">
-            {isSignUp && (
-              <>
-                <div>
-                  <label className="block text-xs text-gray-400 mb-1">Full Name</label>
-                  <input type="text" required value={fullName} onChange={(e) => setFullName(e.target.value)} className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm text-white" />
-                </div>
-                <div>
-                  <label className="block text-xs text-gray-400 mb-1">Email Address</label>
-                  <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm text-white" />
-                </div>
-              </>
-            )}
-
+        {/* LOGIN FORM */}
+        {mode === 'login' && (
+          <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Username or Email</label>
-              <input type="text" required value={usernameInput} onChange={(e) => setUsernameInput(e.target.value)} className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm text-white" placeholder="sam_thomson" />
+              <label className="block text-white text-sm font-bold mb-1">Username</label>
+              <input
+                type="text"
+                required
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Enter your username"
+                className="w-full bg-white/20 text-white placeholder-white/50 border border-white/30 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-white/50"
+              />
+            </div>
+            <div>
+              <label className="block text-white text-sm font-bold mb-1">Password</label>
+              <input
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter your password"
+                className="w-full bg-white/20 text-white placeholder-white/50 border border-white/30 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-white/50"
+              />
             </div>
 
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Password</label>
-              <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm text-white" />
-            </div>
-
-            {isSignUp && (
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">Confirm Password</label>
-                <input type="password" required value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm text-white" />
-              </div>
+            {loginError && (
+              <p className="text-red-200 text-xs font-bold bg-red-500/20 px-3 py-2 rounded-lg">
+                ⚠️ {loginError}
+              </p>
             )}
 
-            <button type="submit" disabled={loading} className="w-full bg-indigo-500 disabled:bg-indigo-500/50 text-white font-bold py-3 rounded-xl text-sm mt-6">
-              {loading ? 'Processing...' : isSignUp ? 'Submit Registration' : 'Authenticate Session'}
+            <button
+              type="submit"
+              disabled={loginLoading}
+              className="w-full bg-white text-indigo-600 font-bold py-3 px-4 rounded-xl shadow-md hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loginLoading ? 'Logging in...' : 'Login'}
             </button>
 
-            <div className="text-center mt-4">
-              <button type="button" onClick={() => { setIsSignUp(!isSignUp); setErrorMessage(''); }} className="text-xs text-indigo-400 underline">
-                {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
+            <p className="text-center text-white/60 text-xs">
+              New student?{' '}
+              <button type="button" onClick={() => setMode('register')} className="text-white font-bold underline">
+                Register here
               </button>
-            </div>
+            </p>
           </form>
         )}
+
+        {/* REGISTER FORM */}
+        {mode === 'register' && (
+          <form onSubmit={handleRegister} className="space-y-4">
+            <div>
+              <label className="block text-white text-sm font-bold mb-1">Full Name</label>
+              <input
+                type="text"
+                required
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                placeholder="Enter your full name"
+                className="w-full bg-white/20 text-white placeholder-white/50 border border-white/30 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-white/50"
+              />
+            </div>
+            <div>
+              <label className="block text-white text-sm font-bold mb-1">Contact Number</label>
+              <input
+                type="tel"
+                required
+                value={contact}
+                onChange={(e) => setContact(e.target.value)}
+                placeholder="Enter your contact number"
+                className="w-full bg-white/20 text-white placeholder-white/50 border border-white/30 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-white/50"
+              />
+            </div>
+            <div>
+              <label className="block text-white text-sm font-bold mb-1">Email Address</label>
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Enter your email"
+                className="w-full bg-white/20 text-white placeholder-white/50 border border-white/30 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-white/50"
+              />
+            </div>
+            <div>
+              <label className="block text-white text-sm font-bold mb-1">Choose a Username</label>
+              <input
+                type="text"
+                required
+                value={regUsername}
+                onChange={(e) => setRegUsername(e.target.value)}
+                placeholder="e.g. sarthak123"
+                className="w-full bg-white/20 text-white placeholder-white/50 border border-white/30 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-white/50"
+              />
+              <p className="text-white/50 text-xs mt-1">Letters, numbers, and underscores only.</p>
+            </div>
+            <div>
+              <label className="block text-white text-sm font-bold mb-1">Choose a Password</label>
+              <input
+                type="password"
+                required
+                value={regPassword}
+                onChange={(e) => setRegPassword(e.target.value)}
+                placeholder="At least 8 characters"
+                className="w-full bg-white/20 text-white placeholder-white/50 border border-white/30 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-white/50"
+              />
+            </div>
+            <div>
+              <label className="block text-white text-sm font-bold mb-1">Confirm Password</label>
+              <input
+                type="password"
+                required
+                value={regConfirmPassword}
+                onChange={(e) => setRegConfirmPassword(e.target.value)}
+                placeholder="Repeat your password"
+                className="w-full bg-white/20 text-white placeholder-white/50 border border-white/30 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-white/50"
+              />
+            </div>
+
+            {registerError && (
+              <p className="text-red-200 text-xs font-bold bg-red-500/20 px-3 py-2 rounded-lg">
+                ⚠️ {registerError}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={registerLoading}
+              className="w-full bg-white text-indigo-600 font-bold py-3 px-4 rounded-xl shadow-md hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {registerLoading ? 'Submitting...' : 'Submit Registration'}
+            </button>
+
+            <p className="text-center text-white/60 text-xs">
+              Already have an account?{' '}
+              <button type="button" onClick={() => setMode('login')} className="text-white font-bold underline">
+                Login here
+              </button>
+            </p>
+          </form>
+        )}
+
       </div>
     </div>
   );

@@ -25,50 +25,63 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  const path = request.nextUrl.pathname;
   const { data: { user } } = await supabase.auth.getUser();
+  const path = request.nextUrl.pathname;
 
-  // 1. Agar user logged in nahi hai aur dashboard/admin access kar raha hai -> Send to login
+  // ── Not logged in ──────────────────────────────────────────────────────────
   if (!user) {
-    if (path.startsWith('/dashboard') || path.startsWith('/admin') || path === '/pending' || path === '/rejected') {
+    if (path.startsWith('/dashboard') || path.startsWith('/admin/dashboard')) {
       return NextResponse.redirect(new URL('/', request.url));
     }
     return supabaseResponse;
   }
 
-  // 2. Fetch Profile strictly by ID (No fallbacks needed anymore!)
+  // ── Logged in — fetch profile ──────────────────────────────────────────────
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role, status')
+    .select('status, role')
     .eq('id', user.id)
-    .maybeSingle();
+    .single();
 
-  // 3. Loop Breaker Check: Agar user landing page '/' par hai par already approved hai -> Send to dashboard
-  if (path === '/' && profile?.status === 'approved' && profile?.role === 'student') {
-    return NextResponse.redirect(new URL('/dashboard', request.url));
-  }
-  if (path === '/' && profile?.role === 'admin') {
-    return NextResponse.redirect(new URL('/admin/dashboard', request.url));
-  }
+  const status = profile?.status;
+  const role = profile?.role;
 
-  // 4. Secure Authorization Gateway Redirections
-  if (path.startsWith('/dashboard') || path.startsWith('/admin')) {
-    if (!profile) {
-      return NextResponse.redirect(new URL('/', request.url));
-    }
-
-    if (profile.role === 'student') {
-      if (profile.status === 'pending' && path !== '/pending') {
-        return NextResponse.redirect(new URL('/pending', request.url));
-      }
-      if (profile.status === 'rejected' && path !== '/rejected') {
-        return NextResponse.redirect(new URL('/rejected', request.url));
-      }
-    }
-
-    if (profile.role === 'admin' && !path.startsWith('/admin')) {
+  // ── Admin ──────────────────────────────────────────────────────────────────
+  if (role === 'admin') {
+    if (path.startsWith('/dashboard')) {
       return NextResponse.redirect(new URL('/admin/dashboard', request.url));
     }
+    if (path === '/' || path === '/pending' || path === '/rejected') {
+      return NextResponse.redirect(new URL('/admin/dashboard', request.url));
+    }
+    return supabaseResponse;
+  }
+
+  // ── Student: pending ───────────────────────────────────────────────────────
+  if (status === 'pending') {
+    if (path.startsWith('/dashboard') || path === '/') {
+      return NextResponse.redirect(new URL('/pending', request.url));
+    }
+    return supabaseResponse;
+  }
+
+  // ── Student: rejected ──────────────────────────────────────────────────────
+  if (status === 'rejected') {
+    if (path.startsWith('/dashboard') || path === '/') {
+      return NextResponse.redirect(new URL('/rejected', request.url));
+    }
+    return supabaseResponse;
+  }
+
+  // ── Student: approved ──────────────────────────────────────────────────────
+  if (status === 'approved') {
+    if (path === '/' || path === '/pending' || path === '/rejected') {
+      return NextResponse.redirect(new URL('/dashboard', request.url));
+    }
+    if (path.startsWith('/admin')) {
+      return NextResponse.redirect(new URL('/dashboard', request.url));
+    }
+    return supabaseResponse;
   }
 
   return supabaseResponse;
@@ -76,6 +89,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|auth/callback|auth/confirm|api).*)',
+    '/((?!_next/static|_next/image|favicon.ico|auth/callback|api).*)',
   ],
 };
