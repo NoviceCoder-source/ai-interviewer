@@ -36,7 +36,7 @@ export default function Home() {
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('email, status, role')
-        .eq('username', username.trim().toLowerCase())
+        .ilike('username', username.trim())
         .single();
 
       if (profileError || !profile) {
