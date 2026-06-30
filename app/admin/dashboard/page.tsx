@@ -1,7 +1,8 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '../../lib/supabase'; // Using your verified relative path layout
+import { supabase } from '../../lib/supabase';
+import { useSiteSettings } from '../../lib/SiteSettingsContext';
 
 type Student = {
   id: string;
@@ -16,6 +17,7 @@ type FilterStatus = 'pending' | 'approved' | 'rejected';
 
 export default function AdminDashboard() {
   const router = useRouter();
+  const settings = useSiteSettings();
   const [activeTab, setActiveTab] = useState<FilterStatus>('pending');
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,12 +54,11 @@ export default function AdminDashboard() {
         .from('profiles')
         .select('id, full_name, email, contact, status, updated_at, role')
         .eq('status', status)
-        .order('updated_at', { ascending: false }); // Ordered correctly by your actual database column
+        .order('updated_at', { ascending: false });
 
       if (error) {
         console.error('Fetch error:', error.message);
       } else {
-        // Safe parsing fallback filters for legacy test records missing roles
         const filteredData = (data || []).filter(
           (user) => user.role === 'student' || (!user.role && user.id !== '487b5110-d8b8-4526-86b9-1f967bd8b942')
         );
@@ -74,17 +75,15 @@ export default function AdminDashboard() {
     fetchStudents(activeTab);
   }, [activeTab]);
 
-  // ── Unified Server Action Dispatcher ──────────────────────────────────────
   const handleStatusChange = async (student: Student, newStatus: 'approved' | 'rejected') => {
     try {
-      // Dispatch data to the secure service role backend route to handle DB update + email dispatch
       const response = await fetch('/api/admin-action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           studentId: student.id,
           action: newStatus,
-          studentEmail: student.email || 'No Email Provided', 
+          studentEmail: student.email || 'No Email Provided',
           studentName: student.full_name,
         }),
       });
@@ -94,8 +93,6 @@ export default function AdminDashboard() {
       if (!response.ok) {
         alert(`Action Failed: ${result.error || 'Could not complete operation.'}`);
       } else {
-        // 🚀 UI Sync: Only remove the student card from the local view array 
-        // once the backend confirms the database transaction succeeded
         setStudents((prevStudents) => prevStudents.filter((item) => item.id !== student.id));
       }
     } catch (err) {
@@ -113,11 +110,17 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-[#0B132B] text-white p-8">
       {/* Upper Navigation Header Grid */}
       <div className="flex justify-between items-center mb-10 max-w-6xl mx-auto">
-        <div>
-          <h1 className="text-3xl font-extrabold tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400">
-            🔐 BIGNALYTICS <span className="text-indigo-400 font-medium text-2xl">ADMIN</span>
-          </h1>
-          <p className="text-gray-400 text-xs mt-1">Logged in as <span className="text-white font-semibold">{adminName}</span></p>
+        <div className="flex items-center gap-3">
+          {settings.logo_url && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={settings.logo_url} alt={settings.org_name} className="h-9 object-contain" />
+          )}
+          <div>
+            <h1 className="text-3xl font-extrabold tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400">
+              🔐 {settings.org_name.toUpperCase()} <span className="text-indigo-400 font-medium text-2xl">ADMIN</span>
+            </h1>
+            <p className="text-gray-400 text-xs mt-1">Logged in as <span className="text-white font-semibold">{adminName}</span></p>
+          </div>
         </div>
         <button
           onClick={handleSignOut}

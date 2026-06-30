@@ -2,9 +2,11 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../lib/supabase';
+import { useSiteSettings } from '../lib/SiteSettingsContext';
 
 export default function AdminLoginPage() {
   const router = useRouter();
+  const settings = useSiteSettings();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [secretCode, setSecretCode] = useState('');
@@ -72,9 +74,18 @@ export default function AdminLoginPage() {
       <div className="bg-gray-900 p-10 rounded-2xl shadow-2xl border border-gray-800 w-full max-w-sm">
 
         <div className="text-center mb-8">
-          <div className="text-5xl mb-3">🔐</div>
+          {settings.logo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={settings.logo_url}
+              alt={settings.org_name}
+              className="h-14 mx-auto mb-3 object-contain"
+            />
+          ) : (
+            <div className="text-5xl mb-3">🔐</div>
+          )}
           <h1 className="text-2xl font-extrabold text-white">Admin Portal</h1>
-          <p className="text-gray-400 text-sm font-medium mt-1">Bignalytics Staff Access</p>
+          <p className="text-gray-400 text-sm font-medium mt-1">{settings.org_name} Staff Access</p>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-4">

@@ -2,11 +2,13 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from './lib/supabase';
+import { useSiteSettings } from './lib/SiteSettingsContext';
 
 type Mode = 'login' | 'register';
 
 export default function Home() {
   const router = useRouter();
+  const settings = useSiteSettings();
   const [mode, setMode] = useState<Mode>('login');
 
   // Login states
@@ -50,7 +52,7 @@ export default function Home() {
       }
 
       if (profile.status === 'rejected') {
-        setLoginError('Your account has been rejected. Please contact Bignalytics.');
+        setLoginError(`Your account has been rejected. Please contact ${settings.org_name}.`);
         return;
       }
 
@@ -145,7 +147,7 @@ export default function Home() {
           <div className="text-5xl mb-4">✅</div>
           <h1 className="text-2xl font-extrabold text-white mb-2">Registration Submitted!</h1>
           <p className="text-indigo-100 text-sm font-medium">
-            Your registration has been sent to Bignalytics staff for approval.
+            Your registration has been sent to {settings.org_name} staff for approval.
             You will receive an email once your account is approved or rejected.
           </p>
           <button
@@ -164,8 +166,17 @@ export default function Home() {
       <div className="bg-white/10 backdrop-blur-lg p-10 rounded-2xl shadow-2xl border border-white/20 w-full max-w-sm">
 
         <div className="text-center mb-8">
-          <div className="text-5xl mb-3">🎓</div>
-          <h1 className="text-3xl font-extrabold text-white">Bignalytics</h1>
+          {settings.logo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={settings.logo_url}
+              alt={settings.org_name}
+              className="h-16 mx-auto mb-3 object-contain"
+            />
+          ) : (
+            <div className="text-5xl mb-3">🎓</div>
+          )}
+          <h1 className="text-3xl font-extrabold text-white">{settings.org_name}</h1>
           <p className="text-indigo-100 text-sm font-medium mt-1">AI Interview Practice Platform</p>
         </div>
 

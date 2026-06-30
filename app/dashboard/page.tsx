@@ -2,11 +2,13 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../lib/supabase';
+import { useSiteSettings } from '../lib/SiteSettingsContext';
 
 export const dynamic = 'force-dynamic';
 
 export default function Dashboard() {
   const router = useRouter();
+  const settings = useSiteSettings();
   const [studentName, setStudentName] = useState('');
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(true);
@@ -73,14 +75,20 @@ export default function Dashboard() {
 
         {/* HEADER */}
         <header className="flex justify-between items-start mb-12">
-          <div>
-            <h1 className="text-4xl font-extrabold tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400 mb-2">
-              🎓 Student Dashboard
-            </h1>
-            <p className="text-gray-400 text-sm font-medium">
-              Welcome back, <span className="text-white font-semibold">{studentName}</span>
-              <span className="text-gray-500 font-normal ml-2">({email})</span>
-            </p>
+          <div className="flex items-center gap-4">
+            {settings.logo_url && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={settings.logo_url} alt={settings.org_name} className="h-10 object-contain" />
+            )}
+            <div>
+              <h1 className="text-4xl font-extrabold tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400 mb-2">
+                🎓 {settings.org_name} Dashboard
+              </h1>
+              <p className="text-gray-400 text-sm font-medium">
+                Welcome back, <span className="text-white font-semibold">{studentName}</span>
+                <span className="text-gray-500 font-normal ml-2">({email})</span>
+              </p>
+            </div>
           </div>
           <button
             onClick={handleSignOut}
@@ -123,7 +131,7 @@ export default function Dashboard() {
 
         {/* Footer */}
         <p className="text-center text-gray-600 text-[10px] font-bold uppercase tracking-widest mt-16">
-          V.2.0 // Bignalytics AI Interviewer
+          V.2.0 // {settings.org_name} AI Interviewer
         </p>
 
       </div>

@@ -6,6 +6,7 @@ import ReactMarkdown from 'react-markdown';
 import SyntaxHighlighter from 'react-syntax-highlighter';
 import { atomOneDark } from 'react-syntax-highlighter/dist/esm/styles/hljs';
 import jsPDF from 'jspdf';
+import { useSiteSettings } from '../../../lib/SiteSettingsContext';
 
 interface Message {
   role: 'user' | 'assistant' | 'system';
@@ -42,6 +43,7 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
+  const settings = useSiteSettings();
 
   // ── Race condition guard ──────────────────────────────────────────────────
   const initializedRef = useRef(false);
@@ -130,8 +132,6 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
   });
 
   // Only count questions that actually received a user response.
-  // Uses content-based lookup instead of reference-based indexOf to avoid
-  // React state re-renders breaking object reference equality.
   const questionsAsked = uniqueQuestions.filter((msg) => {
     const msgIndex = chatHistory.findIndex(
       (m) => m.role === msg.role && m.content === msg.content
@@ -160,18 +160,14 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
       if (data) {
         setInterview(data);
 
-        // ── FIX: If session is already graded, redirect to read-only report
-        // page immediately. Handles direct URL access and back button.
         if (data.report) {
           router.replace(`/dashboard/review/${interviewId}`);
           return;
         }
 
         if (data.chat_history && data.chat_history.length > 0) {
-          // In-progress session — resume silently, no welcome-back needed
           setChatHistory(data.chat_history);
         } else {
-          // Brand new session — trigger first greeting
           await triggerFirstGreeting(data.subject, data.difficulty, user?.id);
         }
       }
@@ -333,7 +329,7 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
       y += 3;
     };
 
-    addText('AI INTERVIEWER', 20, true, [79, 70, 229]);
+    addText(settings.org_name.toUpperCase(), 20, true, [79, 70, 229]);
     addText('Interview Chat Transcript', 12, false, [100, 100, 100]);
     addText(`Subject: ${interview?.subject} | Difficulty: ${interview?.difficulty}`, 11, false, [100, 100, 100]);
     addText(`Date: ${new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`, 11, false, [100, 100, 100]);
@@ -598,9 +594,6 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
                   </div>
                 </div>
 
-                {/* ── FIX: "Return to Dashboard" instead of "Return to Archive"
-                    router.replace removes the interview room from history so
-                    the back button goes to dashboard, not back here. ── */}
                 <div className="bg-white rounded-[2.5rem] p-6 shadow-xl flex flex-col gap-3">
                   <button
                     onClick={() => router.replace('/dashboard')}

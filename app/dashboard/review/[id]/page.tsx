@@ -3,6 +3,7 @@ import { useEffect, useState, use } from 'react';
 import { supabase } from '../../../lib/supabase';
 import { useRouter } from 'next/navigation';
 import jsPDF from 'jspdf';
+import { useSiteSettings } from '../../../lib/SiteSettingsContext';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -32,6 +33,7 @@ export default function ReviewReportPage({ params }: { params: Promise<{ id: str
   const [interview, setInterview] = useState<InterviewData | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+  const settings = useSiteSettings();
 
   useEffect(() => {
     const fetchReport = async () => {
@@ -99,7 +101,7 @@ export default function ReviewReportPage({ params }: { params: Promise<{ id: str
       y += 3;
     };
 
-    addText('AI INTERVIEWER', 20, true, [79, 70, 229]);
+    addText(settings.org_name.toUpperCase(), 20, true, [79, 70, 229]);
     addText('Interview Report', 12, false, [100, 100, 100]);
     addText(`Subject: ${interview.subject} | Difficulty: ${interview.difficulty}`, 11, false, [100, 100, 100]);
     addText(`Date: ${new Date(interview.created_at).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`, 11, false, [100, 100, 100]);
@@ -287,7 +289,7 @@ export default function ReviewReportPage({ params }: { params: Promise<{ id: str
           </div>
         </div>
 
-        {/* Actions — "Back to Archive" since this page is accessed from Past Sessions */}
+        {/* Actions */}
         <div className="bg-white rounded-[2.5rem] p-6 shadow-xl flex flex-col gap-3">
           <button
             onClick={handleDownloadPDF}

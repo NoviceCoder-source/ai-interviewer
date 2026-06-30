@@ -1,9 +1,11 @@
 'use client';
 import { supabase } from '../lib/supabase';
 import { useRouter } from 'next/navigation';
+import { useSiteSettings } from '../lib/SiteSettingsContext';
 
 export default function PendingPage() {
   const router = useRouter();
+  const settings = useSiteSettings();
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -16,7 +18,7 @@ export default function PendingPage() {
         <div className="text-5xl mb-4">⏳</div>
         <h1 className="text-2xl font-extrabold text-white mb-2">Awaiting Approval</h1>
         <p className="text-indigo-100 text-sm font-medium mb-6">
-          Your registration request is being reviewed by Bignalytics staff.
+          Your registration request is being reviewed by {settings.org_name} staff.
           You will receive an email once your account has been approved.
         </p>
         <div className="bg-white/10 rounded-xl p-4 mb-6 border border-white/20">
