@@ -68,18 +68,25 @@ export async function POST(request: Request) {
       );
     }
 
-    // 5. Save profile with username and pending status
+    // 5. Save profile with username and pending status.
+    // NOTE: a DB trigger (handle_new_user_sync) auto-creates a bare profiles
+    // row the instant the auth user is created above. We must upsert here
+    // instead of insert, or this collides with that trigger-created row
+    // ("duplicate key value violates unique constraint profiles_pkey").
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
-      .insert([{
-        id: authData.user.id,
-        email: email.trim().toLowerCase(),
-        full_name: fullName.trim(),
-        contact: contact?.trim() || null,
-        username: username.trim().toLowerCase(),
-        role: 'student',
-        status: 'pending',
-      }]);
+      .upsert(
+        [{
+          id: authData.user.id,
+          email: email.trim().toLowerCase(),
+          full_name: fullName.trim(),
+          contact: contact?.trim() || null,
+          username: username.trim().toLowerCase(),
+          role: 'student',
+          status: 'pending',
+        }],
+        { onConflict: 'id' }
+      );
 
     if (profileError) {
       // Clean up auth user if profile creation fails
