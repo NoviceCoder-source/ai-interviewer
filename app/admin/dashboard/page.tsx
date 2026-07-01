@@ -122,12 +122,22 @@ export default function AdminDashboard() {
             <p className="text-gray-400 text-xs mt-1">Logged in as <span className="text-white font-semibold">{adminName}</span></p>
           </div>
         </div>
-        <button
-          onClick={handleSignOut}
-          className="bg-white/10 hover:bg-white/20 border border-white/10 px-6 py-2.5 rounded-xl text-sm font-bold tracking-wide transition-all"
-        >
-          SIGN OUT
-        </button>
+        
+        {/* Added Flex Wrapper with Settings and Sign Out actions */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => router.push('/admin/settings')}
+            className="bg-white/10 hover:bg-white/20 border border-white/10 px-6 py-2.5 rounded-xl text-sm font-bold tracking-wide transition-all"
+          >
+            SETTINGS
+          </button>
+          <button
+            onClick={handleSignOut}
+            className="bg-white/10 hover:bg-white/20 border border-white/10 px-6 py-2.5 rounded-xl text-sm font-bold tracking-wide transition-all"
+          >
+            SIGN OUT
+          </button>
+        </div>
       </div>
 
       <div className="max-w-6xl mx-auto">
