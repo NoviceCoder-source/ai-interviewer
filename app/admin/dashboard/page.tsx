@@ -75,7 +75,7 @@ export default function AdminDashboard() {
     fetchStudents(activeTab);
   }, [activeTab]);
 
-  const handleStatusChange = async (student: Student, newStatus: 'approved' | 'rejected') => {
+  const handleStatusChange = async (student: Student, newStatus: 'approve' | 'reject') => {
     try {
       const response = await fetch('/api/admin-action', {
         method: 'POST',
@@ -175,13 +175,13 @@ export default function AdminDashboard() {
                   {activeTab === 'pending' && (
                     <div className="flex space-x-3 mt-5">
                       <button
-                        onClick={() => handleStatusChange(student, 'approved')}
+                        onClick={() => handleStatusChange(student, 'approve')}
                         className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 rounded-lg text-xs tracking-wider transition-all"
                       >
                         APPROVE
                       </button>
                       <button
-                        onClick={() => handleStatusChange(student, 'rejected')}
+                        onClick={() => handleStatusChange(student, 'reject')}
                         className="flex-1 bg-red-500/20 hover:bg-red-500 text-red-200 font-bold py-2 rounded-lg text-xs tracking-wider border border-red-500/30 transition-all"
                       >
                         REJECT
