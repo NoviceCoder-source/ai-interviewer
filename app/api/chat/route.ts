@@ -253,6 +253,12 @@ STRICT RULES — NEVER BREAK THESE:
 9. HONEST EVALUATION: Be direct. No false praise. 2 sentences max per evaluation.
 
 10. STRICTLY FOLLOW YOUR DIFFICULTY LEVEL: This is non-negotiable. Re-read your difficulty guidelines before every question you ask.
+
+11. RESPONSE FORMAT: Structure every reply using this exact markdown template:
+> Feedback on their answer (if applicable)
+
+**Next Question:**
+The question text here
 `;
 
     if (subject && subject !== 'Resume-Based') {
