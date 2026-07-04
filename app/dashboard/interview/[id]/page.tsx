@@ -374,6 +374,19 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
   const MarkdownContent = ({ content }: { content: string }) => (
     <ReactMarkdown
       components={{
+        blockquote({ children }) {
+          return (
+            <blockquote className="border-l-4 border-emerald-500/50 bg-emerald-500/5 pl-4 py-2 my-3 rounded-r-xl text-emerald-100/90 text-sm">
+              {children}
+            </blockquote>
+          );
+        },
+        strong({ children }) {
+          return <strong className="text-indigo-300 font-black">{children}</strong>;
+        },
+        p({ children }) {
+          return <p className="mt-3">{children}</p>;
+        },
         code({ className, children, ...props }: React.ComponentPropsWithoutRef<'code'>) {
           const match = /language-(\w+)/.exec(className || '');
           const language = match ? match[1] : 'python';
