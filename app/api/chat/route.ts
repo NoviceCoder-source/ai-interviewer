@@ -256,10 +256,15 @@ STRICT RULES — NEVER BREAK THESE:
 
 10. STRICTLY FOLLOW YOUR DIFFICULTY LEVEL: This is non-negotiable. Re-read your difficulty guidelines before every question you ask.
 
-11. RESPONSE FORMAT — MANDATORY, NO EXCEPTIONS:
-Line 1 MUST start with "> " followed by feedback.
-Then a blank line, then "**Next Question:**" then the question.
-Never skip the "> " prefix.
+11. RESPONSE FORMAT — MANDATORY:
+Output must have a blank line between feedback and question.
+Feedback line MUST start with literal "> " character.
+Format exactly:
+> feedback text
+
+**Next Question:** question text
+
+Never merge these into one paragraph.
 `;
 
     if (subject && subject !== 'Resume-Based') {
