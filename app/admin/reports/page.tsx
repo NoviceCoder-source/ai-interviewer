@@ -23,6 +23,8 @@ export default function AdminReportsPage() {
   const router = useRouter();
   const [sessions, setSessions] = useState<InterviewRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [sortBy, setSortBy] = useState<'date' | 'subject' | 'score'>('date');
 
   useEffect(() => {
     const load = async () => {
@@ -48,6 +50,17 @@ export default function AdminReportsPage() {
     };
     load();
   }, [router]);
+
+  const filtered = sessions
+    .filter(s =>
+      s.profiles?.full_name?.toLowerCase().includes(search.toLowerCase()) ||
+      s.profiles?.email?.toLowerCase().includes(search.toLowerCase())
+    )
+    .sort((a, b) => {
+      if (sortBy === 'date') return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      if (sortBy === 'subject') return a.subject.localeCompare(b.subject);
+      return b.report.score - a.report.score;
+    });
 
   if (loading) {
     return (
@@ -75,9 +88,28 @@ export default function AdminReportsPage() {
           <p className="text-gray-500 font-medium mt-2">Review every student&apos;s interview performance.</p>
         </header>
 
+        <div className="flex gap-4 mb-6">
+          <input
+            type="text"
+            placeholder="Search by student name or email..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="flex-1 bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as 'date' | 'subject' | 'score')}
+            className="bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value="date">Sort: Date</option>
+            <option value="subject">Sort: Subject</option>
+            <option value="score">Sort: Score</option>
+          </select>
+        </div>
+
         <div className="grid gap-6">
-          {sessions.length > 0 ? (
-            sessions.map((s) => (
+          {filtered.length > 0 ? (
+            filtered.map((s) => (
               <div
                 key={s.id}
                 className="group bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-sm hover:shadow-xl hover:shadow-indigo-100/50 transition-all flex flex-col md:flex-row justify-between items-center gap-6"
