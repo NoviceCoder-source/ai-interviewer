@@ -142,17 +142,17 @@ export default function Home() {
   // ── Success Screen ─────────────────────────────────────────────────────────
   if (registerSuccess) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 p-4">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary via-secondary to-pink-500 p-4">
         <div className="bg-white/10 backdrop-blur-lg p-10 rounded-2xl shadow-2xl border border-white/20 w-full max-w-sm text-center">
           <div className="text-5xl mb-4">✅</div>
           <h1 className="text-2xl font-extrabold text-white mb-2">Registration Submitted!</h1>
-          <p className="text-indigo-100 text-sm font-medium">
+          <p className="text-primary text-sm font-medium">
             Your registration has been sent to {settings.org_name} staff for approval.
             You will receive an email once your account is approved or rejected.
           </p>
           <button
             onClick={() => { setRegisterSuccess(false); setMode('login'); }}
-            className="mt-6 w-full bg-white text-indigo-600 font-bold py-3 px-4 rounded-xl hover:scale-105 transition-all"
+            className="mt-6 w-full bg-white text-primary font-bold py-3 px-4 rounded-xl hover:scale-105 transition-all"
           >
             Back to Login
           </button>
@@ -162,7 +162,7 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary via-secondary to-pink-500 p-4">
       <div className="bg-white/10 backdrop-blur-lg p-10 rounded-2xl shadow-2xl border border-white/20 w-full max-w-sm">
 
         <div className="text-center mb-8">
@@ -185,7 +185,7 @@ export default function Home() {
           <button
             onClick={() => { setMode('login'); setLoginError(''); }}
             className={`flex-1 py-3 text-sm font-bold transition-all ${
-              mode === 'login' ? 'bg-white text-indigo-600' : 'bg-transparent text-white hover:bg-white/10'
+              mode === 'login' ? 'bg-white text-primary' : 'bg-transparent text-white hover:bg-white/10'
             }`}
           >
             Login
@@ -193,7 +193,7 @@ export default function Home() {
           <button
             onClick={() => { setMode('register'); setRegisterError(''); }}
             className={`flex-1 py-3 text-sm font-bold transition-all ${
-              mode === 'register' ? 'bg-white text-indigo-600' : 'bg-transparent text-white hover:bg-white/10'
+              mode === 'register' ? 'bg-white text-primary' : 'bg-transparent text-white hover:bg-white/10'
             }`}
           >
             Register
@@ -235,7 +235,7 @@ export default function Home() {
             <button
               type="submit"
               disabled={loginLoading}
-              className="w-full bg-white text-indigo-600 font-bold py-3 px-4 rounded-xl shadow-md hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full bg-white text-primary font-bold py-3 px-4 rounded-xl shadow-md hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loginLoading ? 'Logging in...' : 'Login'}
             </button>
@@ -329,7 +329,7 @@ export default function Home() {
             <button
               type="submit"
               disabled={registerLoading}
-              className="w-full bg-white text-indigo-600 font-bold py-3 px-4 rounded-xl shadow-md hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full bg-white text-primary font-bold py-3 px-4 rounded-xl shadow-md hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {registerLoading ? 'Submitting...' : 'Submit Registration'}
             </button>
