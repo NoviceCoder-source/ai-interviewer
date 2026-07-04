@@ -8,42 +8,21 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-const TOPICS: Record<string, string> = {
-  Python: 'variables, data types, lists, tuples, dicts, functions, loops, conditionals, string ops, comprehensions, decorators, generators, OOP, exceptions, GIL, memory management',
-  SQL: 'tables, SELECT, WHERE, joins, primary/foreign keys, GROUP BY, HAVING, subqueries, indexes, window functions, query optimization',
-  'Machine Learning': 'ML basics, supervised vs unsupervised, model evaluation, overfitting, cross-validation, precision/recall, bagging/boosting, regularization, gradient boosting, backpropagation',
-  'Data Analytics': 'data types, mean/median, outliers, data cleaning, correlation vs causation, A/B testing, dimensionality reduction, charting choices',
-};
-
-const FORBIDDEN: Record<string, string> = {
-  fresher: `- Algorithms (sorting, searching, recursion)
-- Time/space complexity
-- Any coding challenge
-- Libraries (Pandas, NumPy, Scikit-learn)
-- Joins, window functions, indexing (SQL)
-- Model evaluation, overfitting (ML)`,
-  beginner: `- Sorting algorithms, recursion
-- Decorators, generators, closures
-- Window functions, query optimization (SQL)
-- Cross-validation, precision/recall (ML)
-- Anything requiring more than 5-10 lines of code`,
-  intermediate: `- Python GIL, metaclasses, descriptors
-- Query execution plans (SQL)
-- Gradient boosting internals (ML)
-- Mathematical proofs`,
-  advanced: '',
+const COMPLEXITY: Record<string, string> = {
+  beginner: 'Only core syntax, definitions, and basic usage a self-taught learner knows after a few weeks. No internals, no advanced features, no libraries.',
+  intermediate: 'Idiomatic real-world usage a working professional knows. Internals allowed only if commonly used day-to-day.',
+  advanced: 'Internals, performance, and architecture-level understanding expected of a senior engineer.',
 };
 
 const getDifficultyGuidelines = (difficulty: string, subject: string) => {
   const key = difficulty?.toLowerCase();
-  const forbidden = FORBIDDEN[key] || '';
+  const complexity = COMPLEXITY[key] || COMPLEXITY.beginner;
   return `
 DIFFICULTY LEVEL: ${key?.toUpperCase()} — STRICTLY ENFORCE THIS
 
-Generate your own original ${subject} questions appropriate for this level.
-Cover topics like: ${TOPICS[subject] || subject}.
+${complexity}
+Ask original ${subject} questions matching this complexity level only — nothing harder, nothing easier.
 Every question must be a NEW topic not asked before this session (see list below).
-${forbidden ? `\nFORBIDDEN AT ${key.toUpperCase()} LEVEL:\n${forbidden}` : 'Expect detailed answers with code, math reasoning, and architectural decisions.'}
   `;
 };
 

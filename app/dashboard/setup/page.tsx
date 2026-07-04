@@ -152,9 +152,8 @@ export default function SetupInterviewPage() {
                 <label className="block text-sm font-bold text-gray-700 mb-2">
                   Select Difficulty
                 </label>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-3 gap-3">
                   {[
-                    { level: 'Fresher', desc: 'No experience', emoji: '🌱' },
                     { level: 'Beginner', desc: 'Some basics', emoji: '📘' },
                     { level: 'Intermediate', desc: 'Working knowledge', emoji: '⚡' },
                     { level: 'Advanced', desc: 'Expert level', emoji: '🔥' },
