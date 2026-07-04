@@ -61,19 +61,13 @@ const enforceFormat = (raw: string): string => {
     .replace(/^>\s?/gm, '')
     .trim();
 
-  const qIdx = cleaned.lastIndexOf('?');
-  if (qIdx === -1) return cleaned;
+  const lines = cleaned.split('\n').map(l => l.trim()).filter(Boolean);
+  const qLineIdx = [...lines].reverse().findIndex(l => l.includes('?'));
+  if (qLineIdx === -1) return cleaned;
 
-  const beforeQ = cleaned.slice(0, qIdx + 1);
-  const sentenceStart = Math.max(
-    beforeQ.lastIndexOf('. '),
-    beforeQ.lastIndexOf('! '),
-    beforeQ.lastIndexOf('? ', qIdx - 1)
-  );
-  const splitAt = sentenceStart === -1 ? 0 : sentenceStart + 2;
-
-  const feedback = cleaned.slice(0, splitAt).trim();
-  const question = cleaned.slice(splitAt).trim();
+  const splitIdx = lines.length - 1 - qLineIdx;
+  const feedback = lines.slice(0, splitIdx).join(' ').trim();
+  const question = lines.slice(splitIdx).join(' ').trim();
 
   return feedback ? `> ${feedback}\n\n**Next Question:** ${question}` : `**Next Question:** ${question}`;
 };
