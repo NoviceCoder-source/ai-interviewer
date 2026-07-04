@@ -94,12 +94,12 @@ export default function AdminReportsPage() {
             placeholder="Search by student name or email..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="flex-1 bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="flex-1 bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as 'date' | 'subject' | 'score')}
-            className="bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           >
             <option value="date">Sort: Date</option>
             <option value="subject">Sort: Subject</option>
