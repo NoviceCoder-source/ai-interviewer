@@ -56,13 +56,15 @@ const getAskedTopics = (messages: { role: string; content: string }[]): string =
 };
 
 const enforceFormat = (raw: string): string => {
-  const trimmed = raw.trim();
-  if (/^>\s/.test(trimmed) || /^\*\*Next Question:\*\*/i.test(trimmed)) return trimmed;
+  const cleaned = raw
+    .replace(/\*\*Next Question:\*\*/gi, '')
+    .replace(/^>\s?/gm, '')
+    .trim();
 
-  const qIdx = trimmed.lastIndexOf('?');
-  if (qIdx === -1) return trimmed;
+  const qIdx = cleaned.lastIndexOf('?');
+  if (qIdx === -1) return cleaned;
 
-  const beforeQ = trimmed.slice(0, qIdx + 1);
+  const beforeQ = cleaned.slice(0, qIdx + 1);
   const sentenceStart = Math.max(
     beforeQ.lastIndexOf('. '),
     beforeQ.lastIndexOf('! '),
@@ -70,8 +72,8 @@ const enforceFormat = (raw: string): string => {
   );
   const splitAt = sentenceStart === -1 ? 0 : sentenceStart + 2;
 
-  const feedback = trimmed.slice(0, splitAt).trim();
-  const question = trimmed.slice(splitAt).trim();
+  const feedback = cleaned.slice(0, splitAt).trim();
+  const question = cleaned.slice(splitAt).trim();
 
   return feedback ? `> ${feedback}\n\n**Next Question:** ${question}` : `**Next Question:** ${question}`;
 };
