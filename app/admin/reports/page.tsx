@@ -99,7 +99,7 @@ export default function AdminReportsPage() {
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as 'date' | 'subject' | 'score')}
-            className="bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="bg-white border border-gray-200 rounded-xl pl-4 pr-8 py-3 text-sm font-bold text-gray-900 appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500"
           >
             <option value="date">Sort: Date</option>
             <option value="subject">Sort: Subject</option>
