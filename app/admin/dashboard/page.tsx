@@ -131,6 +131,9 @@ export default function AdminDashboard() {
           >
             SETTINGS
           </button>
+          <button onClick={() => router.push('/admin/reports')} className="bg-white/10 hover:bg-white/20 border border-white/10 px-6 py-2.5 rounded-xl text-sm font-bold tracking-wide transition-all">
+            REPORTS
+          </button>
           <button
             onClick={handleSignOut}
             className="bg-white/10 hover:bg-white/20 border border-white/10 px-6 py-2.5 rounded-xl text-sm font-bold tracking-wide transition-all"
@@ -182,22 +185,18 @@ export default function AdminDashboard() {
                     </div>
                   </div>
 
-                  {activeTab === 'pending' && (
-                    <div className="flex space-x-3 mt-5">
-                      <button
-                        onClick={() => handleStatusChange(student, 'approve')}
-                        className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 rounded-lg text-xs tracking-wider transition-all"
-                      >
+                  <div className="flex space-x-3 mt-5">
+                    {activeTab !== 'approved' && (
+                      <button onClick={() => handleStatusChange(student, 'approve')} className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 rounded-lg text-xs tracking-wider transition-all">
                         APPROVE
                       </button>
-                      <button
-                        onClick={() => handleStatusChange(student, 'reject')}
-                        className="flex-1 bg-red-500/20 hover:bg-red-500 text-red-200 font-bold py-2 rounded-lg text-xs tracking-wider border border-red-500/30 transition-all"
-                      >
+                    )}
+                    {activeTab !== 'rejected' && (
+                      <button onClick={() => handleStatusChange(student, 'reject')} className="flex-1 bg-red-500/20 hover:bg-red-500 text-red-200 font-bold py-2 rounded-lg text-xs tracking-wider border border-red-500/30 transition-all">
                         REJECT
                       </button>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
