@@ -48,7 +48,7 @@ const enforceFormat = (raw: string): string => {
   const feedback = lines.slice(0, splitIdx).join(' ').trim();
   const question = lines.slice(splitIdx).join(' ').trim();
 
-  return feedback ? `> ${feedback}\n\n**Next Question:** ${question}` : `**Next Question:** ${question}`;
+  return feedback ? `> ${feedback}\n\n\n**Next Question:** ${question}` : `**Next Question:** ${question}`;
 };
 
 export async function POST(req: Request) {
