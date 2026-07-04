@@ -17,12 +17,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const { data: profile } = await supabaseAdmin.from('profiles').select('role').eq('id', user.id).single();
   if (profile?.role !== 'admin') return NextResponse.json({ error: 'Admin access required.' }, { status: 403 });
 
-  const { data, error } = await supabaseAdmin
+  const { data: interview, error } = await supabaseAdmin
     .from('interviews')
-    .select('id, subject, difficulty, created_at, report, chat_history, profiles(full_name, email)')
+    .select('id, subject, difficulty, created_at, report, chat_history, user_id')
     .eq('id', id)
     .single();
 
-  if (error || !data) return NextResponse.json({ error: 'Not found.' }, { status: 404 });
-  return NextResponse.json({ interview: data });
+  if (error || !interview) return NextResponse.json({ error: 'Not found.' }, { status: 404 });
+
+  const { data: profile2 } = await supabaseAdmin.from('profiles').select('full_name, email').eq('id', interview.user_id).single();
+
+  return NextResponse.json({ interview: { ...interview, profiles: profile2 || null } });
 }
