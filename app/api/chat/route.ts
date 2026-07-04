@@ -256,11 +256,10 @@ STRICT RULES — NEVER BREAK THESE:
 
 10. STRICTLY FOLLOW YOUR DIFFICULTY LEVEL: This is non-negotiable. Re-read your difficulty guidelines before every question you ask.
 
-11. RESPONSE FORMAT: Structure every reply using this exact markdown template:
-> Feedback on their answer (if applicable)
-
-**Next Question:**
-The question text here
+11. RESPONSE FORMAT — MANDATORY, NO EXCEPTIONS:
+Line 1 MUST start with "> " followed by feedback.
+Then a blank line, then "**Next Question:**" then the question.
+Never skip the "> " prefix.
 `;
 
     if (subject && subject !== 'Resume-Based') {
