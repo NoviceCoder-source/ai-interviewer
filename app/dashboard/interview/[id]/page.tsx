@@ -1,6 +1,6 @@
 'use client';
 import React, { useEffect, useState, useRef, use } from 'react';
-import { supabase } from '../../../lib/supabase';
+import { supabase } from '../../../lib/supabase/browser';
 import { useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import SyntaxHighlighter from 'react-syntax-highlighter';
@@ -8,7 +8,8 @@ import { atomOneDark } from 'react-syntax-highlighter/dist/esm/styles/hljs';
 import { useSiteSettings } from '../../../lib/SiteSettingsContext';
 import type { Message, EvaluationReport } from '../../../lib/types';
 import { getScoreColor } from '../../../lib/scoreColors';
-import { getUniqueQuestions } from '../../../lib/questionAnalysis';
+import { MIN_QUESTIONS_TO_FINISH, countAnsweredQuestions } from '../../../lib/questionAnalysis';
+import { api } from '../../../lib/api';
 import { generateInterviewPDF } from '../../../lib/pdfReport';
 import ScoreCard from '../../../components/ScoreCard';
 import StrengthsImprovements from '../../../components/StrengthsImprovements';
@@ -33,135 +34,59 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
   const [report, setReport] = useState<EvaluationReport | null>(null);
   const [isThinking, setIsThinking] = useState(false);
   const [isInputDisabled, setIsInputDisabled] = useState(false);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [error, setError] = useState('');
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const settings = useSiteSettings();
-
   const initializedRef = useRef(false);
 
-  const WRITE_BATCH_SIZE = 3;
-  const messagesSinceLastWrite = useRef(0);
-  const latestHistoryRef = useRef<Message[]>([]);
-  const accessTokenRef = useRef<string | null>(null);
+  const questionsAsked = countAnsweredQuestions(chatHistory);
+  const minQuestionsRequired = MIN_QUESTIONS_TO_FINISH;
+  const canEndInterview = questionsAsked >= minQuestionsRequired;
 
-  useEffect(() => {
-    latestHistoryRef.current = chatHistory;
-  }, [chatHistory]);
-
-  useEffect(() => {
-    const handleUnload = () => {
-      if (messagesSinceLastWrite.current > 0 && accessTokenRef.current) {
-        navigator.sendBeacon(
-          `/api/save-history`,
-          new Blob(
-            [JSON.stringify({
-              id: interviewId,
-              chat_history: latestHistoryRef.current,
-              access_token: accessTokenRef.current,
-            })],
-            { type: 'application/json' }
-          )
-        );
-      }
-    };
-    window.addEventListener('beforeunload', handleUnload);
-    return () => window.removeEventListener('beforeunload', handleUnload);
-  }, [interviewId]);
-
-  const saveHistory = async (history: Message[], force = false) => {
-    messagesSinceLastWrite.current += 1;
-    const shouldWrite = force || messagesSinceLastWrite.current >= WRITE_BATCH_SIZE;
-
-    if (shouldWrite) {
-      messagesSinceLastWrite.current = 0;
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-      await fetch('/api/save-history', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ id: interviewId, chat_history: history }),
-      });
+  /** Sends one turn to the server; the server stores it and returns the full saved transcript. */
+  const sendTurn = async (message?: string) => {
+    setIsThinking(true);
+    setError('');
+    try {
+      const { history } = await api.post<{ history: Message[] }>('/api/chat', { interviewId, message });
+      setChatHistory(history);
+      return true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'The interviewer did not respond. Please try again.');
+      return false;
+    } finally {
+      setIsThinking(false);
     }
   };
-
-  const assistantMessages = chatHistory.filter(m => m.role === 'assistant');
-  const uniqueQuestions = getUniqueQuestions(assistantMessages);
-
-  const questionsAsked = uniqueQuestions.filter((msg) => {
-    const msgIndex = chatHistory.findIndex(
-      (m) => m.role === msg.role && m.content === msg.content
-    );
-    const nextMsg = chatHistory[msgIndex + 1];
-    return nextMsg?.role === 'user';
-  }).length;
-  const minQuestionsRequired = 5;
-  const canEndInterview = questionsAsked >= minQuestionsRequired;
 
   useEffect(() => {
     if (initializedRef.current) return;
     initializedRef.current = true;
 
     const startSession = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) setCurrentUserId(user.id);
-
-      const { data: { session } } = await supabase.auth.getSession();
-      accessTokenRef.current = session?.access_token || null;
-
       const { data } = await supabase
         .from('interviews')
-        .select('*')
+        .select('id, subject, difficulty, report, chat_history')
         .eq('id', interviewId)
         .single();
 
-      if (data) {
-        setInterview(data);
-
-        if (data.report) {
-          router.replace(`/dashboard/review/${interviewId}`);
-          return;
-        }
-
-        if (data.chat_history && data.chat_history.length > 0) {
-          setChatHistory(data.chat_history);
-        } else {
-          await triggerFirstGreeting(data.subject, data.difficulty, user?.id);
-        }
+      if (!data) {
+        router.replace('/dashboard');
+        return;
       }
+      if (data.report) {
+        router.replace(`/dashboard/review/${interviewId}`);
+        return;
+      }
+
+      setInterview(data);
+      if (data.chat_history?.length) setChatHistory(data.chat_history);
+      else await sendTurn();
     };
 
-    const triggerFirstGreeting = async (subject: string, difficulty: string, userId?: string) => {
-      setIsThinking(true);
-      try {
-        const res = await fetch('/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            messages: [{ role: 'user', content: "Hello! I am ready to start. Please introduce yourself and ask me the first question." }],
-            subject,
-            difficulty,
-            userId,
-          }),
-        });
-        const chatData = await res.json();
-        if (chatData.text) {
-          const initialHistory: Message[] = [{ role: 'assistant', content: chatData.text }];
-          setChatHistory(initialHistory);
-          await saveHistory(initialHistory, true);
-        }
-      } catch (err) {
-        console.error("Initial Chat Error:", err);
-      } finally {
-        setIsThinking(false);
-      }
-    };
-
-    if (interviewId) startSession();
+    startSession();
   }, [interviewId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -171,37 +96,17 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
   }, [chatHistory, isThinking]);
 
   const handleSendMessage = async () => {
-    if (!userInput.trim() || isThinking || isInputDisabled) return;
+    const answer = userInput.trim();
+    if (!answer || isThinking || isInputDisabled) return;
 
-    const userMsg: Message = { role: 'user', content: userInput };
-    const updatedHistory = [...chatHistory, userMsg];
-
-    setChatHistory(updatedHistory);
+    // Show the answer immediately; the server's transcript replaces it on success.
+    const previous = chatHistory;
+    setChatHistory([...chatHistory, { role: 'user', content: answer }]);
     setUserInput('');
-    setIsThinking(true);
 
-    try {
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: updatedHistory,
-          subject: interview?.subject,
-          difficulty: interview?.difficulty,
-          userId: currentUserId,
-        }),
-      });
-
-      const data = await res.json();
-      if (data.text) {
-        const newHistory: Message[] = [...updatedHistory, { role: 'assistant', content: data.text }];
-        setChatHistory(newHistory);
-        await saveHistory(newHistory);
-      }
-    } catch (err) {
-      console.error("Chat Error:", err);
-    } finally {
-      setIsThinking(false);
+    if (!(await sendTurn(answer))) {
+      setChatHistory(previous);
+      setUserInput(answer);
     }
   };
 
@@ -210,44 +115,12 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
 
     setIsInputDisabled(true);
     setIsEvaluating(true);
-
+    setError('');
     try {
-      const lastMsg = chatHistory[chatHistory.length - 1];
-      const historyForEvaluation = lastMsg?.role === 'assistant'
-        ? chatHistory.slice(0, -1)
-        : chatHistory;
-
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated.');
-
-      const response = await fetch('/api/evaluate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ history: historyForEvaluation, subject: interview?.subject }),
-        });
-
-      const data = await response.json();
-
-      const finalReport: EvaluationReport = {
-        score: data.score ?? 0,
-        summary: data.summary || "No summary generated.",
-        strengths: data.strengths || [],
-        improvements: data.improvements || [],
-      };
-
-      setReport(finalReport);
-
-      await supabase
-        .from('interviews')
-        .update({ report: finalReport, chat_history: chatHistory })
-        .eq('id', interviewId);
-
-      messagesSinceLastWrite.current = 0;
-    } catch (e) {
-      console.error("Evaluation Error:", e);
+      const { report } = await api.post<{ report: EvaluationReport }>('/api/evaluate', { interviewId });
+      setReport(report);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Grading failed. Please try again.');
       setIsInputDisabled(false);
     } finally {
       setIsEvaluating(false);
@@ -376,6 +249,11 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
             )}
           </div>
 
+          {error && (
+            <div role="alert" className="mx-6 mb-2 rounded-2xl border border-red-500/30 bg-red-500/10 px-5 py-3 text-sm font-medium text-red-200">
+              {error}
+            </div>
+          )}
           <div className="p-6 bg-[#0a0a1a]/50 backdrop-blur-2xl border-t border-white/5 flex gap-4 items-end">
             <textarea
               value={userInput}

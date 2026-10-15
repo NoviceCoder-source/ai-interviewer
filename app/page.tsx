@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from './lib/supabase';
+import { api } from './lib/api';
 import { useSiteSettings } from './lib/SiteSettingsContext';
 import { Mic, BarChart3, TrendingUp, User, Lock, Eye, EyeOff, ArrowRight, Mail, Phone, UserPlus } from 'lucide-react';
 
@@ -39,32 +39,10 @@ export default function Home() {
     setLoginError('');
     setLoginLoading(true);
     try {
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('email, status, role')
-        .ilike('username', username.trim())
-        .single();
-
-      if (profileError || !profile) {
-        setLoginError('Username not found. Please check your username.');
-        return;
-      }
-      if (profile.status === 'pending') {
-        setLoginError('Your account is still pending approval.');
-        return;
-      }
-      if (profile.status === 'rejected') {
-        setLoginError(`Your account has been rejected. Please contact ${settings.org_name}.`);
-        return;
-      }
-
-      const { error: signInError } = await supabase.auth.signInWithPassword({ email: profile.email, password });
-      if (signInError) { setLoginError('Incorrect password. Please try again.'); return; }
-
-      router.push(profile.role === 'admin' ? '/admin/dashboard' : '/dashboard');
+      const { redirectTo } = await api.post<{ redirectTo: string }>('/api/auth/login', { username, password });
+      router.push(redirectTo);
     } catch (err) {
-      console.error('Login error:', err);
-      setLoginError('Something went wrong. Please try again.');
+      setLoginError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
     } finally {
       setLoginLoading(false);
     }
@@ -81,21 +59,14 @@ export default function Home() {
 
     setRegisterLoading(true);
     try {
-      const res = await fetch('/api/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fullName, contact, email,
-          username: regUsername.trim().toLowerCase(),
-          password: regPassword,
-        }),
+      await api.post('/api/register', {
+        fullName, contact, email,
+        username: regUsername.trim().toLowerCase(),
+        password: regPassword,
       });
-      const data = await res.json();
-      if (!res.ok) { setRegisterError(data.error || 'Registration failed.'); return; }
       setRegisterSuccess(true);
     } catch (err) {
-      console.error('Registration error:', err);
-      setRegisterError('Something went wrong. Please try again.');
+      setRegisterError(err instanceof Error ? err.message : 'Registration failed.');
     } finally {
       setRegisterLoading(false);
     }

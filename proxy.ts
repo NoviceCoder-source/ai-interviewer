@@ -5,7 +5,7 @@ const STUDENT_PATHS = ['/dashboard'];
 const ADMIN_PATHS = ['/admin/dashboard', '/admin/reports', '/admin/settings'];
 const AUTH_ONLY_PATHS = ['/pending', '/rejected'];
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request: { headers: request.headers } });
 
   const supabase = createServerClient(

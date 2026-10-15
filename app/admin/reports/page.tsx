@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '../../lib/supabase';
+import { api } from '../../lib/api';
 
 interface Report {
   score: number;
@@ -28,15 +28,9 @@ export default function AdminReportsPage() {
 
   useEffect(() => {
     const load = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { router.push('/'); return; }
-
       try {
-        const res = await fetch('/api/admin/interviews', {
-          headers: { Authorization: `Bearer ${session.access_token}` },
-        });
-        const data = await res.json();
-        if (res.ok) setSessions(data.interviews || []);
+        const { interviews } = await api.get<{ interviews: InterviewRow[] }>('/api/admin/interviews');
+        setSessions(interviews);
       } catch (err) {
         console.error('Error fetching admin reports:', err);
       } finally {

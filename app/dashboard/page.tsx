@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../lib/supabase/browser';
 import { useSiteSettings } from '../lib/SiteSettingsContext';
 import {
   LayoutDashboard, Mic, History, BarChart3, Settings,

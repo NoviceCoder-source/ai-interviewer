@@ -1,78 +1,50 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import PDFParser from 'pdf2json';
+import { requireUser } from '../../lib/auth';
+import { supabaseAdmin } from '../../lib/supabase/admin';
+import { jsonError, serverError } from '../../lib/http';
 
-// Use the Service Role Key to bypass RLS policies during the parse
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY! // Use the SECRET service key here
-);
+const MAX_RESUME_BYTES = 5 * 1024 * 1024;
 
+function extractPdfText(buffer: Buffer): Promise<string> {
+  const parser = new PDFParser(null, 1);
+  return new Promise((resolve, reject) => {
+    parser.on('pdfParser_dataError', (err) => reject(new Error(err.parserError)));
+    parser.on('pdfParser_dataReady', () => resolve(parser.getRawTextContent()));
+    parser.parseBuffer(buffer);
+  });
+}
+
+/** Accepts a PDF upload, stores it privately under the caller's folder, and saves its text. */
 export async function POST(req: Request) {
+  const auth = await requireUser();
+  if (!auth.ok) return auth.response;
+
   try {
-    const token = req.headers.get('Authorization')?.replace('Bearer ', '');
-    if (!token) return NextResponse.json({ error: 'Not authenticated.' }, { status: 401 });
+    const form = await req.formData();
+    const file = form.get('file');
+    if (!(file instanceof File)) return jsonError(400, 'Please choose a PDF file.');
+    if (file.size > MAX_RESUME_BYTES) return jsonError(400, 'Resume must be 5 MB or smaller.');
 
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
-    if (authError || !user) return NextResponse.json({ error: 'Not authenticated.' }, { status: 401 });
+    const buffer = Buffer.from(await file.arrayBuffer());
+    if (buffer.subarray(0, 4).toString() !== '%PDF') return jsonError(400, 'Only PDF files are supported.');
 
-    const { filePath } = await req.json();
-    const userId = user.id; // always use the authenticated caller's id, never trust the body
+    const text = (await extractPdfText(buffer)).replace(/\u0000/g, '').trim();
+    if (!text) return jsonError(400, 'Could not read any text from this PDF. Is it a scanned image?');
 
-    console.log("🆔 Admin Sync for User ID:", userId);
-
-    if (!filePath) {
-      return NextResponse.json({ error: "Missing data" }, { status: 400 });
-    }
-
-    // 1. Download from Storage
-    const { data, error: downloadError } = await supabaseAdmin.storage
+    const { error: uploadError } = await supabaseAdmin.storage
       .from('resumes')
-      .download(filePath);
+      .upload(`${auth.userId}/${Date.now()}.pdf`, buffer, { contentType: 'application/pdf' });
+    if (uploadError) throw uploadError;
 
-    if (downloadError) throw downloadError;
-
-    // 2. Parse PDF
-    const buffer = Buffer.from(await data.arrayBuffer());
-    const pdfParser = new PDFParser(null, 1);
-    
-    const fullText = await new Promise<string>((resolve, reject) => {
-      pdfParser.on("pdfParser_dataError", (errData: { parserError: string }) => reject(errData.parserError));
-      pdfParser.on("pdfParser_dataReady", () => {
-        resolve(pdfParser.getRawTextContent());
-      });
-      pdfParser.parseBuffer(buffer);
-    });
-
-    const cleanedText = fullText.replace(/\u0000/g, '').trim();
-    console.log("📝 Extracted Text Length:", cleanedText.length);
-
-    // 3. THE FIX: Admin Upsert (Bypasses RLS)
-    const { data: upsertData, error: upsertError } = await supabaseAdmin
+    const { error: updateError } = await supabaseAdmin
       .from('profiles')
-      .upsert({ 
-        id: userId, 
-        resume_context: cleanedText,
-        updated_at: new Date().toISOString() 
-      })
-      .select();
+      .update({ resume_context: text, updated_at: new Date().toISOString() })
+      .eq('id', auth.userId);
+    if (updateError) throw updateError;
 
-    if (upsertError) {
-      console.error("❌ Admin Sync Error:", upsertError.message);
-      throw upsertError;
-    }
-
-    console.log("✅ Admin Sync Success! Rows affected:", upsertData?.length);
-
-    return NextResponse.json({ 
-      success: true, 
-      message: "Resume saved via Admin sync!",
-      textLength: cleanedText.length 
-    });
-
-  } catch (err: unknown) {
-    const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
-    console.error("❌ PARSE ROUTE CRASHED:", errorMessage);
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    return serverError('parse-resume', err);
   }
 }

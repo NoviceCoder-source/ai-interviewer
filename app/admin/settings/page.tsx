@@ -1,7 +1,8 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '../../lib/supabase';
+import { supabase } from '../../lib/supabase/browser';
+import { api } from '../../lib/api';
 
 interface SiteSettingsForm {
   org_name: string;
@@ -53,15 +54,9 @@ export default function AdminSettingsPage() {
     setUploadingLogo(true);
     setError('');
     try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `logo-${Date.now()}.${fileExt}`;
-      const filePath = `logos/${fileName}`;
-      const { error: uploadError } = await supabase.storage
-        .from('branding').upload(filePath, file, { upsert: true });
-      if (uploadError) throw uploadError;
-      const { data: publicUrlData } = supabase.storage.from('branding').getPublicUrl(filePath);
-      setForm((f) => ({ ...f, logo_url: publicUrlData.publicUrl }));
-    } catch (err: unknown) {
+      const { url } = await api.upload<{ url: string }>('/api/admin/logo', file);
+      setForm((f) => ({ ...f, logo_url: url }));
+    } catch (err) {
       setError(err instanceof Error ? err.message : 'Logo upload failed.');
     } finally {
       setUploadingLogo(false);
@@ -75,32 +70,17 @@ export default function AdminSettingsPage() {
     setSuccess(false);
     setSaving(true);
     try {
-      const subjects = subjectsInput.split(',').map((s) => s.trim()).filter(Boolean);
-
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { setError('You must be logged in.'); return; }
-
-      const res = await fetch('/api/admin/update-settings', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          org_name: form.org_name.trim(),
-          logo_url: form.logo_url,
-          primary_color: form.primary_color,
-          secondary_color: form.secondary_color,
-          subjects,
-        }),
+      await api.post('/api/admin/update-settings', {
+        org_name: form.org_name.trim(),
+        logo_url: form.logo_url,
+        primary_color: form.primary_color,
+        secondary_color: form.secondary_color,
+        subjects: subjectsInput.split(',').map((s) => s.trim()).filter(Boolean),
       });
-
-      const data = await res.json();
-      if (!res.ok) { setError(data.error || 'Failed to save settings.'); return; }
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Something went wrong.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save settings.');
     } finally {
       setSaving(false);
     }

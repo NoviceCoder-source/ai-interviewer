@@ -1,17 +1,10 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '../../lib/supabase';
+import { supabase } from '../../lib/supabase/browser';
 import { useSiteSettings } from '../../lib/SiteSettingsContext';
-
-type Student = {
-  id: string;
-  full_name: string;
-  email: string;
-  contact: string;
-  status: 'pending' | 'approved' | 'rejected';
-  updated_at: string;
-};
+import { api } from '../../lib/api';
+import type { Student } from '../../lib/types';
 
 type FilterStatus = 'pending' | 'approved' | 'rejected';
 
@@ -43,22 +36,10 @@ export default function AdminDashboard() {
   const fetchStudents = async (status: FilterStatus) => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, full_name, email, contact, status, updated_at, role')
-        .eq('status', status)
-        .order('updated_at', { ascending: false });
-
-      if (error) {
-        console.error('Fetch error:', error.message);
-      } else {
-        const filteredData = (data || []).filter(
-          (user) => user.role === 'student' || (!user.role && user.id !== '487b5110-d8b8-4526-86b9-1f967bd8b942')
-        );
-        setStudents(filteredData as Student[]);
-      }
+      const { students } = await api.get<{ students: Student[] }>(`/api/admin/students?status=${status}`);
+      setStudents(students);
     } catch (err) {
-      console.error('Unexpected dashboard fetch exception:', err);
+      alert(err instanceof Error ? err.message : 'Could not load students.');
     } finally {
       setLoading(false);
     }
@@ -68,35 +49,12 @@ export default function AdminDashboard() {
     fetchStudents(activeTab);
   }, [activeTab]);
 
-  const handleStatusChange = async (student: Student, newStatus: 'approve' | 'reject') => {
-  try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) { alert('You must be logged in.'); return; }
-
-    const response = await fetch('/api/admin-action', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${session.access_token}`,
-      },
-      body: JSON.stringify({
-        studentId: student.id,
-        action: newStatus,
-        studentEmail: student.email || 'No Email Provided',
-        studentName: student.full_name,
-      }),
-    });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        alert(`Action Failed: ${result.error || 'Could not complete operation.'}`);
-      } else {
-        setStudents((prevStudents) => prevStudents.filter((item) => item.id !== student.id));
-      }
+  const handleStatusChange = async (student: Student, action: 'approve' | 'reject') => {
+    try {
+      await api.post(`/api/admin/students/${student.id}`, { action });
+      setStudents((prev) => prev.filter((item) => item.id !== student.id));
     } catch (err) {
-      console.error('Error during administrative transformation loop:', err);
-      alert('Network exception: Unable to contact administrative pipeline servers.');
+      alert(`Action failed: ${err instanceof Error ? err.message : 'Could not complete operation.'}`);
     }
   };
 

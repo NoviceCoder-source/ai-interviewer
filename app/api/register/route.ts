@@ -1,113 +1,67 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { supabaseAdmin } from '../../lib/supabase/admin';
+import { jsonError, serverError } from '../../lib/http';
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+const USERNAME = /^[a-z0-9_]{3,30}$/;
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MIN_PASSWORD_LENGTH = 8;
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { email, fullName, contact, username, password } = body;
+    const email = String(body.email ?? '').trim().toLowerCase();
+    const fullName = String(body.fullName ?? '').trim();
+    const contact = String(body.contact ?? '').trim();
+    const username = String(body.username ?? '').trim().toLowerCase();
+    const password = String(body.password ?? '');
 
-    // 1. Validate inputs
-    if (!email || !fullName || !username || !password) {
-      return NextResponse.json(
-        { error: 'All fields are required.' },
-        { status: 400 }
-      );
+    if (!email || !fullName || !username || !password) return jsonError(400, 'All fields are required.');
+    if (!EMAIL.test(email)) return jsonError(400, 'Please enter a valid email address.');
+    if (!USERNAME.test(username)) {
+      return jsonError(400, 'Username must be 3–30 characters: letters, numbers and underscores only.');
+    }
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      return jsonError(400, `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
     }
 
-    // 2. Check if email already exists
-    const { data: existingEmail } = await supabaseAdmin
-      .from('profiles')
-      .select('id')
-      .eq('email', email.trim().toLowerCase())
-      .single();
+    const { data: existingEmail } = await supabaseAdmin.from('profiles').select('id').eq('email', email).maybeSingle();
+    if (existingEmail) return jsonError(400, 'This email is already registered.');
 
-    if (existingEmail) {
-      return NextResponse.json(
-        { error: 'This email is already registered.' },
-        { status: 400 }
-      );
-    }
+    const { data: existingUsername } = await supabaseAdmin.from('profiles').select('id').eq('username', username).maybeSingle();
+    if (existingUsername) return jsonError(400, 'This username is already taken. Please choose another.');
 
-    // 3. Check if username already exists
-    const { data: existingUsername } = await supabaseAdmin
-      .from('profiles')
-      .select('id')
-      .eq('username', username.trim().toLowerCase())
-      .single();
-
-    if (existingUsername) {
-      return NextResponse.json(
-        { error: 'This username is already taken. Please choose another.' },
-        { status: 400 }
-      );
-    }
-
-    // 4. Create auth account with their chosen password
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-      email: email.trim().toLowerCase(),
-      password: password,
+      email,
+      password,
       email_confirm: true,
     });
-
-    if (authError) {
-      return NextResponse.json(
-        { error: `Registration failed: ${authError.message}` },
-        { status: 400 }
-      );
+    if (authError || !authData?.user) {
+      console.error('[register] createUser failed:', authError?.message);
+      return jsonError(400, 'Unable to create account. Please check your details and try again.');
     }
 
-    if (!authData?.user) {
-      return NextResponse.json(
-        { error: 'Unable to create account.' },
-        { status: 400 }
-      );
-    }
-
-    // 5. Save profile with username and pending status.
-    // NOTE: a DB trigger (handle_new_user_sync) auto-creates a bare profiles
-    // row the instant the auth user is created above. We must upsert here
-    // instead of insert, or this collides with that trigger-created row
-    // ("duplicate key value violates unique constraint profiles_pkey").
-    const { error: profileError } = await supabaseAdmin
-      .from('profiles')
-      .upsert(
-        [{
-          id: authData.user.id,
-          email: email.trim().toLowerCase(),
-          full_name: fullName.trim(),
-          contact: contact?.trim() || null,
-          username: username.trim().toLowerCase(),
-          role: 'student',
-          status: 'pending',
-        }],
-        { onConflict: 'id' }
-      );
+    // A DB trigger (handle_new_user_sync) creates a bare profiles row as soon as the
+    // auth user exists, so upsert rather than insert to avoid a primary-key collision.
+    const { error: profileError } = await supabaseAdmin.from('profiles').upsert(
+      {
+        id: authData.user.id,
+        email,
+        full_name: fullName,
+        contact: contact || null,
+        username,
+        role: 'student',
+        status: 'pending',
+      },
+      { onConflict: 'id' }
+    );
 
     if (profileError) {
-      // Clean up auth user if profile creation fails
       await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
-      return NextResponse.json(
-        { error: `Profile creation failed: ${profileError.message}` },
-        { status: 500 }
-      );
+      throw profileError;
     }
 
-    return NextResponse.json({
-      success: true,
-      message: 'Registration submitted successfully.'
-    });
-
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Register route error:', message);
-    return NextResponse.json(
-      { error: 'Internal server error.' },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    return serverError('register', err);
   }
 }

@@ -1,7 +1,8 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '../lib/supabase';
+import Link from 'next/link';
+import { api } from '../lib/api';
 import { useSiteSettings } from '../lib/SiteSettingsContext';
 
 export default function AdminLoginPage() {
@@ -17,53 +18,11 @@ export default function AdminLoginPage() {
     e.preventDefault();
     setError('');
     setLoading(true);
-
     try {
-      // Step 1: Verify secret code against admin_config table
-      const { data: config, error: configError } = await supabase
-        .from('admin_config')
-        .select('secret_code')
-        .single();
-
-      if (configError || !config) {
-        setError('Could not verify secret code. Please try again.');
-        return;
-      }
-
-      if (config.secret_code !== secretCode.trim()) {
-        setError('Invalid secret code.');
-        return;
-      }
-
-      // Step 2: Sign in with Supabase auth
-      const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
-        email: email.trim().toLowerCase(),
-        password,
-      });
-
-      if (signInError || !authData.user) {
-        setError('Invalid email or password.');
-        return;
-      }
-
-      // Step 3: Verify they actually have admin role in profiles
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', authData.user.id)
-        .single();
-
-      if (profileError || profile?.role !== 'admin') {
-        await supabase.auth.signOut();
-        setError('You do not have admin access.');
-        return;
-      }
-
-      router.replace('/admin/dashboard');
-
+      const { redirectTo } = await api.post<{ redirectTo: string }>('/api/auth/admin-login', { email, password, secretCode });
+      router.replace(redirectTo);
     } catch (err) {
-      console.error('Admin login error:', err);
-      setError('Something went wrong. Please try again.');
+      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -141,9 +100,9 @@ export default function AdminLoginPage() {
 
           <p className="text-center text-gray-600 text-xs">
             Student?{' '}
-            <a href="/" className="text-indigo-400 font-bold hover:underline">
+            <Link href="/" className="text-indigo-400 font-bold hover:underline">
               Go to student login
-            </a>
+            </Link>
           </p>
         </form>
 

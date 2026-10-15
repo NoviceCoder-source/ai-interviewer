@@ -1,5 +1,5 @@
 'use client';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../lib/supabase/browser';
 import { useRouter } from 'next/navigation';
 import { useSiteSettings } from '../lib/SiteSettingsContext';
 

@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState, use } from 'react';
-import { supabase } from '../../../lib/supabase';
+import { api } from '../../../lib/api';
 import { useRouter } from 'next/navigation';
 import { useSiteSettings } from '../../../lib/SiteSettingsContext';
 import type { AdminInterviewData as InterviewData } from '../../../lib/types';
@@ -21,17 +21,11 @@ export default function AdminReviewReportPage({ params }: { params: Promise<{ id
 
   useEffect(() => {
     const fetchReport = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { router.push('/'); return; }
       try {
-        const res = await fetch(`/api/admin/interview/${interviewId}`, {
-          headers: { Authorization: `Bearer ${session.access_token}` },
-        });
-        const data = await res.json();
-        if (!res.ok || !data.interview?.report) { router.push('/admin/reports'); return; }
-        setInterview(data.interview);
-      } catch (err) {
-        console.error(err);
+        const { interview } = await api.get<{ interview: InterviewData }>(`/api/admin/interview/${interviewId}`);
+        if (!interview?.report) { router.push('/admin/reports'); return; }
+        setInterview(interview);
+      } catch {
         router.push('/admin/reports');
       } finally {
         setLoading(false);

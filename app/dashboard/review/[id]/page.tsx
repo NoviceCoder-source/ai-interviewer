@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState, use } from 'react';
-import { supabase } from '../../../lib/supabase';
+import { supabase } from '../../../lib/supabase/browser';
 import { useRouter } from 'next/navigation';
 import jsPDF from 'jspdf';
 import { useSiteSettings } from '../../../lib/SiteSettingsContext';

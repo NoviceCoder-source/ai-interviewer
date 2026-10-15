@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '../../lib/supabase';
+import { api } from '../../lib/api';
 import { useSiteSettings } from '../../lib/SiteSettingsContext';
 import {
   LayoutDashboard, Mic, History, BarChart3, Settings, Bell, ChevronDown,
@@ -18,7 +18,7 @@ export default function SetupInterviewPage() {
   const [uploading, setUploading] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const subjects = settings.subjects?.length ? settings.subjects : ['Python', 'SQL', 'Data Analytics', 'Machine Learning'];
+  const subjects = settings.subjects;
   const popularTopics = subjects.slice(0, 4);
 
   const primaryBg = { backgroundColor: 'var(--color-primary)' };
@@ -40,58 +40,23 @@ export default function SetupInterviewPage() {
     }
     setIsLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { alert('You must be logged in to start an interview.'); setIsLoading(false); return; }
-
-      const { data, error } = await supabase
-        .from('interviews')
-        .insert([{
-          user_id: session.user.id,
-          subject: mode === 'resume' ? 'Resume-Based' : subject,
-          difficulty: mode === 'resume' ? 'Personalized' : difficulty,
-          status: 'in_progress',
-        }])
-        .select()
-        .single();
-
-      if (error) throw error;
-      router.push(`/dashboard/interview/${data.id}`);
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
-      console.error('Error saving interview:', errorMessage);
-      alert('Failed to save interview.');
-    } finally {
+      const { id } = await api.post<{ id: string }>('/api/interviews', { mode, subject, difficulty });
+      router.push(`/dashboard/interview/${id}`);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to start the interview.');
       setIsLoading(false);
     }
   };
 
   const handleResumeUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
     try {
-      setUploading(true);
-      if (!event.target.files || event.target.files.length === 0) return;
-
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { alert('You must be logged in.'); return; }
-
-      const file = event.target.files[0];
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${session.user.id}-${Math.random()}.${fileExt}`;
-      const filePath = `resumes/${fileName}`;
-
-      const { error: uploadError } = await supabase.storage.from('resumes').upload(filePath, file);
-      if (uploadError) throw uploadError;
-
-      const response = await fetch('/api/parse-resume', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filePath, userId: session.user.id }),
-      });
-
-      if (!response.ok) throw new Error('Parsing failed. Please try again.');
+      await api.upload('/api/parse-resume', file);
       alert('Resume uploaded! You can now start your personalized interview.');
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'An error occurred';
-      alert('Error: ' + errorMessage);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Resume upload failed.');
     } finally {
       setUploading(false);
       event.target.value = '';

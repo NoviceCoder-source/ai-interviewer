@@ -1,20 +1,25 @@
 import { NextResponse } from 'next/server';
-import { requireAdmin, supabaseAdmin } from '../../../../lib/requireAdmin';
+import { requireAdmin } from '../../../../lib/auth';
+import { supabaseAdmin } from '../../../../lib/supabase/admin';
+import { jsonError } from '../../../../lib/http';
 
-export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth.response;
+
   const { id } = await params;
-  const auth = await requireAdmin(request);
-  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
-
-  const { data: interview, error } = await supabaseAdmin
+  const { data: interview } = await supabaseAdmin
     .from('interviews')
     .select('id, subject, difficulty, created_at, report, chat_history, user_id')
     .eq('id', id)
-    .single();
+    .maybeSingle();
+  if (!interview) return jsonError(404, 'Not found.');
 
-  if (error || !interview) return NextResponse.json({ error: 'Not found.' }, { status: 404 });
+  const { data: profile } = await supabaseAdmin
+    .from('profiles')
+    .select('full_name, email')
+    .eq('id', interview.user_id)
+    .maybeSingle();
 
-  const { data: profile2 } = await supabaseAdmin.from('profiles').select('full_name, email').eq('id', interview.user_id).single();
-
-  return NextResponse.json({ interview: { ...interview, profiles: profile2 || null } });
+  return NextResponse.json({ interview: { ...interview, profiles: profile || null } });
 }

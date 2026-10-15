@@ -1,22 +1,29 @@
 import { NextResponse } from 'next/server';
-import { requireAdmin, supabaseAdmin } from '../../../lib/requireAdmin';
+import { requireAdmin } from '../../../lib/auth';
+import { supabaseAdmin } from '../../../lib/supabase/admin';
+import { serverError } from '../../../lib/http';
 
-export async function GET(request: Request) {
-  const auth = await requireAdmin(request);
-  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+/** All graded interviews, newest first, with the student's name and email. */
+export async function GET() {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth.response;
 
-  const { data: interviews, error } = await supabaseAdmin
-    .from('interviews')
-    .select('id, subject, difficulty, created_at, report, user_id')
-    .not('report', 'is', null)
-    .order('created_at', { ascending: false });
+  try {
+    const { data: interviews, error } = await supabaseAdmin
+      .from('interviews')
+      .select('id, subject, difficulty, created_at, report, user_id')
+      .not('report', 'is', null)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    const userIds = [...new Set(interviews.map((i) => i.user_id))];
+    const { data: profiles } = await supabaseAdmin.from('profiles').select('id, full_name, email').in('id', userIds);
+    const profileMap = Object.fromEntries((profiles || []).map((p) => [p.id, p]));
 
-  const userIds = [...new Set(interviews.map(i => i.user_id))];
-  const { data: profiles } = await supabaseAdmin.from('profiles').select('id, full_name, email').in('id', userIds);
-  const profileMap = Object.fromEntries((profiles || []).map(p => [p.id, p]));
-  const result = interviews.map(i => ({ ...i, profiles: profileMap[i.user_id] || null }));
-
-  return NextResponse.json({ interviews: result });
+    return NextResponse.json({
+      interviews: interviews.map((i) => ({ ...i, profiles: profileMap[i.user_id] || null })),
+    });
+  } catch (err) {
+    return serverError('admin/interviews', err);
+  }
 }

@@ -55,3 +55,11 @@ export function getUniqueQuestions(assistantMessages: Message[]): Message[] {
     return !isDuplicate;
   });
 }
+
+export const MIN_QUESTIONS_TO_FINISH = 5;
+
+/** Unique interviewer questions that the candidate has replied to. */
+export function countAnsweredQuestions(history: Message[]): number {
+  const unique = new Set(getUniqueQuestions(history.filter((m) => m.role === 'assistant')));
+  return history.filter((m, i) => unique.has(m) && history[i + 1]?.role === 'user').length;
+}
