@@ -10,11 +10,18 @@ const supabaseAdmin = createClient(
 
 export async function POST(req: Request) {
   try {
-    const { filePath, userId } = await req.json();
+    const token = req.headers.get('Authorization')?.replace('Bearer ', '');
+    if (!token) return NextResponse.json({ error: 'Not authenticated.' }, { status: 401 });
+
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+    if (authError || !user) return NextResponse.json({ error: 'Not authenticated.' }, { status: 401 });
+
+    const { filePath } = await req.json();
+    const userId = user.id; // always use the authenticated caller's id, never trust the body
 
     console.log("🆔 Admin Sync for User ID:", userId);
 
-    if (!filePath || !userId) {
+    if (!filePath) {
       return NextResponse.json({ error: "Missing data" }, { status: 400 });
     }
 

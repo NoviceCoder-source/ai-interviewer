@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-// Uses the service role key so the save works even if the user's
-// auth session cookie has already been cleared during page unload.
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -10,10 +8,28 @@ const supabaseAdmin = createClient(
 
 export async function POST(req: Request) {
   try {
-    const { id, chat_history } = await req.json();
+    const body = await req.json();
+    const { id, chat_history, access_token } = body;
+
+    const headerToken = req.headers.get('Authorization')?.replace('Bearer ', '');
+    const token = headerToken || access_token;
+    if (!token) return NextResponse.json({ error: 'Not authenticated.' }, { status: 401 });
+
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+    if (authError || !user) return NextResponse.json({ error: 'Not authenticated.' }, { status: 401 });
+
     if (!id || !chat_history) {
       return NextResponse.json({ error: 'Missing data' }, { status: 400 });
     }
+
+    const { data: existing, error: fetchError } = await supabaseAdmin
+      .from('interviews')
+      .select('user_id')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !existing) return NextResponse.json({ error: 'Interview not found.' }, { status: 404 });
+    if (existing.user_id !== user.id) return NextResponse.json({ error: 'Forbidden.' }, { status: 403 });
 
     const { error } = await supabaseAdmin
       .from('interviews')

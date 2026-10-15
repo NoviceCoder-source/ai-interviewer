@@ -5,20 +5,14 @@ import { useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import SyntaxHighlighter from 'react-syntax-highlighter';
 import { atomOneDark } from 'react-syntax-highlighter/dist/esm/styles/hljs';
-import jsPDF from 'jspdf';
 import { useSiteSettings } from '../../../lib/SiteSettingsContext';
-
-interface Message {
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-}
-
-interface EvaluationReport {
-  score: number;
-  summary: string;
-  strengths: string[];
-  improvements: string[];
-}
+import type { Message, EvaluationReport } from '../../../lib/types';
+import { getScoreColor } from '../../../lib/scoreColors';
+import { getUniqueQuestions } from '../../../lib/questionAnalysis';
+import { generateInterviewPDF } from '../../../lib/pdfReport';
+import ScoreCard from '../../../components/ScoreCard';
+import StrengthsImprovements from '../../../components/StrengthsImprovements';
+import ReportActions from '../../../components/ReportActions';
 
 interface InterviewData {
   id: string;
@@ -45,26 +39,28 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
   const router = useRouter();
   const settings = useSiteSettings();
 
-  // ── Race condition guard ──────────────────────────────────────────────────
   const initializedRef = useRef(false);
 
-  // ── Batched Supabase writes ───────────────────────────────────────────────
   const WRITE_BATCH_SIZE = 3;
   const messagesSinceLastWrite = useRef(0);
   const latestHistoryRef = useRef<Message[]>([]);
+  const accessTokenRef = useRef<string | null>(null);
 
   useEffect(() => {
     latestHistoryRef.current = chatHistory;
   }, [chatHistory]);
 
-  // Flush unsaved messages when the user closes/navigates away.
   useEffect(() => {
     const handleUnload = () => {
-      if (messagesSinceLastWrite.current > 0) {
+      if (messagesSinceLastWrite.current > 0 && accessTokenRef.current) {
         navigator.sendBeacon(
           `/api/save-history`,
           new Blob(
-            [JSON.stringify({ id: interviewId, chat_history: latestHistoryRef.current })],
+            [JSON.stringify({
+              id: interviewId,
+              chat_history: latestHistoryRef.current,
+              access_token: accessTokenRef.current,
+            })],
             { type: 'application/json' }
           )
         );
@@ -80,58 +76,22 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
 
     if (shouldWrite) {
       messagesSinceLastWrite.current = 0;
-      await supabase
-        .from('interviews')
-        .update({ chat_history: history })
-        .eq('id', interviewId);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      await fetch('/api/save-history', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ id: interviewId, chat_history: history }),
+      });
     }
   };
 
-  // ── Unique question detection ─────────────────────────────────────────────
-  const STOP_WORDS = new Set([
-    'what','is','are','the','a','an','in','of','to','do','does','how',
-    'why','when','where','which','can','you','your','it','its','this',
-    'that','and','or','for','with','about','between','explain','describe',
-    'define','tell','me','difference','use','used','give','example','write',
-    'simple','basic','python','sql','data','machine','learning','analytics'
-  ]);
-
-  const extractQuestion = (content: string): string => {
-    const sentences = content.split(/(?<=[.?!])\s+/);
-    const questionSentence = sentences.find(s => s.trim().endsWith('?'))
-      || sentences[sentences.length - 1];
-    return questionSentence.toLowerCase().trim();
-  };
-
-  const getKeywords = (text: string): Set<string> => {
-    const words = text
-      .replace(/[^a-z0-9\s]/g, '')
-      .split(/\s+/)
-      .filter(w => w.length > 2 && !STOP_WORDS.has(w));
-    return new Set(words);
-  };
-
   const assistantMessages = chatHistory.filter(m => m.role === 'assistant');
+  const uniqueQuestions = getUniqueQuestions(assistantMessages);
 
-  const uniqueQuestions = assistantMessages.filter((msg, index) => {
-    if (index === 0) return true;
-
-    const currentKeywords = getKeywords(extractQuestion(msg.content));
-    if (currentKeywords.size === 0) return true;
-
-    const isDuplicate = assistantMessages.slice(0, index).some(prevMsg => {
-      const prevKeywords = getKeywords(extractQuestion(prevMsg.content));
-      if (prevKeywords.size === 0) return false;
-
-      const overlap = [...currentKeywords].filter(w => prevKeywords.has(w)).length;
-      const similarity = overlap / Math.max(currentKeywords.size, prevKeywords.size);
-      return similarity >= 0.75;
-    });
-
-    return !isDuplicate;
-  });
-
-  // Only count questions that actually received a user response.
   const questionsAsked = uniqueQuestions.filter((msg) => {
     const msgIndex = chatHistory.findIndex(
       (m) => m.role === msg.role && m.content === msg.content
@@ -142,7 +102,6 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
   const minQuestionsRequired = 5;
   const canEndInterview = questionsAsked >= minQuestionsRequired;
 
-  // ── Session initialisation ───────────────────────────────────────────────
   useEffect(() => {
     if (initializedRef.current) return;
     initializedRef.current = true;
@@ -150,6 +109,9 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
     const startSession = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) setCurrentUserId(user.id);
+
+      const { data: { session } } = await supabase.auth.getSession();
+      accessTokenRef.current = session?.access_token || null;
 
       const { data } = await supabase
         .from('interviews')
@@ -202,14 +164,12 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
     if (interviewId) startSession();
   }, [interviewId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-scroll
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
     }
   }, [chatHistory, isThinking]);
 
-  // ── Send message ─────────────────────────────────────────────────────────
   const handleSendMessage = async () => {
     if (!userInput.trim() || isThinking || isInputDisabled) return;
 
@@ -245,7 +205,6 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
     }
   };
 
-  // ── End interview ────────────────────────────────────────────────────────
   const handleEndInterview = async () => {
     if (!canEndInterview) return;
 
@@ -258,11 +217,17 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
         ? chatHistory.slice(0, -1)
         : chatHistory;
 
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated.');
+
       const response = await fetch('/api/evaluate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify({ history: historyForEvaluation, subject: interview?.subject }),
-      });
+        });
 
       const data = await response.json();
 
@@ -289,87 +254,20 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
     }
   };
 
-  // ── Strip markdown syntax for clean PDF output ───────────────────────────
-  const stripMarkdown = (text: string): string => {
-    return text
-      .replace(/```[\s\S]*?```/g, '[code block]')
-      .replace(/`([^`]+)`/g, '$1')
-      .replace(/#{1,6}\s+/g, '')
-      .replace(/\*\*(.+?)\*\*/g, '$1')
-      .replace(/\*(.+?)\*/g, '$1')
-      .replace(/~~(.+?)~~/g, '$1')
-      .replace(/!\[.*?\]\(.*?\)/g, '')
-      .replace(/\[(.+?)\]\(.*?\)/g, '$1')
-      .replace(/^\s*[-*+]\s+/gm, '• ')
-      .replace(/^\s*\d+\.\s+/gm, '')
-      .replace(/^\s*>\s+/gm, '')
-      .replace(/---/g, '─────────────────')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim();
-  };
-
-  // ── PDF download ─────────────────────────────────────────────────────────
   const handleDownloadPDF = () => {
-    const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const margin = 15;
-    const maxWidth = pageWidth - margin * 2;
-    let y = 20;
-
-    const addText = (text: string, fontSize: number, isBold = false, color: [number, number, number] = [0, 0, 0]) => {
-      doc.setFontSize(fontSize);
-      doc.setFont('helvetica', isBold ? 'bold' : 'normal');
-      doc.setTextColor(...color);
-      const lines = doc.splitTextToSize(text, maxWidth);
-      lines.forEach((line: string) => {
-        if (y > 270) { doc.addPage(); y = 20; }
-        doc.text(line, margin, y);
-        y += fontSize * 0.5;
-      });
-      y += 3;
-    };
-
-    addText(settings.org_name.toUpperCase(), 20, true, [79, 70, 229]);
-    addText('Interview Chat Transcript', 12, false, [100, 100, 100]);
-    addText(`Subject: ${interview?.subject} | Difficulty: ${interview?.difficulty}`, 11, false, [100, 100, 100]);
-    addText(`Date: ${new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`, 11, false, [100, 100, 100]);
-
-    y += 5;
-    doc.setDrawColor(200, 200, 200);
-    doc.line(margin, y, pageWidth - margin, y);
-    y += 10;
-
-    if (report) {
-      addText(`FINAL SCORE: ${report.score}%`, 16, true, [79, 70, 229]);
-      addText(report.summary, 11, false, [60, 60, 60]);
-      y += 5;
-      doc.line(margin, y, pageWidth - margin, y);
-      y += 10;
-    }
-
-    addText('CHAT TRANSCRIPT', 13, true, [40, 40, 40]);
-    y += 3;
-
-    chatHistory.forEach((msg) => {
-      if (msg.role === 'assistant') {
-        addText('Interviewer:', 10, true, [79, 70, 229]);
-        addText(stripMarkdown(msg.content), 10, false, [30, 30, 30]);
-      } else if (msg.role === 'user') {
-        addText('Candidate:', 10, true, [16, 185, 129]);
-        addText(stripMarkdown(msg.content), 10, false, [30, 30, 30]);
-      }
-      y += 2;
+    const doc = generateInterviewPDF({
+      orgName: settings.org_name,
+      subject: interview?.subject || '',
+      difficulty: interview?.difficulty || '',
+      date: new Date(),
+      report: report || undefined,
+      chatHistory: chatHistory,
+      heading: 'Interview Chat Transcript',
     });
-
     doc.save(`interview-${interview?.subject}-${interview?.difficulty}-${new Date().toISOString().slice(0, 10)}.pdf`);
   };
 
-  const getScoreColor = (score: number) => {
-    if (score >= 80) return { text: 'text-emerald-600', bg: 'bg-emerald-500', label: 'Excellent' };
-    if (score >= 60) return { text: 'text-indigo-600', bg: 'bg-indigo-500', label: 'Good' };
-    if (score >= 40) return { text: 'text-amber-600', bg: 'bg-amber-500', label: 'Average' };
-    return { text: 'text-red-600', bg: 'bg-red-500', label: 'Needs Work' };
-  };
+  const scoreColors = report ? getScoreColor(report.score) : null;
 
   const MarkdownContent = ({ content }: { content: string }) => (
     <ReactMarkdown
@@ -410,13 +308,10 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
     </ReactMarkdown>
   );
 
-  const scoreColors = report ? getScoreColor(report.score) : null;
-
   return (
     <div className="min-h-screen bg-[#0a0a1a] p-4 md:p-8 font-sans">
       <div className="max-w-6xl mx-auto flex flex-col h-[92vh]">
 
-        {/* HEADER */}
         <header className="flex justify-between items-center mb-8 px-4">
           <div className="flex items-center gap-4">
             <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
@@ -459,7 +354,6 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
           </div>
         </header>
 
-        {/* CHAT INTERFACE */}
         <main className="flex-1 bg-[#111122] rounded-[3rem] shadow-2xl overflow-hidden flex flex-col border border-white/5 relative">
           <div ref={scrollRef} className="flex-1 p-8 overflow-y-auto space-y-8 scrollbar-hide">
             {chatHistory.map((msg, i) => (
@@ -482,7 +376,6 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
             )}
           </div>
 
-          {/* INPUT AREA */}
           <div className="p-6 bg-[#0a0a1a]/50 backdrop-blur-2xl border-t border-white/5 flex gap-4 items-end">
             <textarea
               value={userInput}
@@ -513,7 +406,6 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
         </main>
       </div>
 
-      {/* EVALUATION MODAL */}
       {(isEvaluating || report) && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-3xl z-[100] flex items-start justify-center p-4 overflow-y-auto pt-8 pb-20">
           <div className="max-w-3xl w-full my-auto">
@@ -525,34 +417,13 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
               </div>
             ) : report && scoreColors && (
               <div className="space-y-4 animate-in fade-in duration-500">
-                <div className="bg-white rounded-[2.5rem] p-8 shadow-2xl">
-                  <div className="flex items-center justify-between mb-6">
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-400 mb-1">Interview Report</p>
-                      <h2 className="text-2xl font-black text-gray-900 uppercase tracking-tight">
-                        {interview?.subject} <span className="text-gray-300">·</span> <span className="text-indigo-500">{interview?.difficulty}</span>
-                      </h2>
-                      <p className="text-gray-400 text-xs font-medium mt-1">
-                        {new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <div className={`text-7xl font-black tracking-tighter ${scoreColors.text}`}>
-                        {report.score}<span className="text-3xl">%</span>
-                      </div>
-                      <span className={`inline-block mt-1 px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest text-white ${scoreColors.bg}`}>
-                        {scoreColors.label}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
-                    <div className={`h-2.5 rounded-full transition-all duration-1000 ${scoreColors.bg}`} style={{ width: `${report.score}%` }} />
-                  </div>
-                  <div className="flex justify-between text-[9px] font-black uppercase tracking-widest text-gray-300 mt-1.5">
-                    <span>0</span><span>50</span><span>100</span>
-                  </div>
-                </div>
-
+                <ScoreCard
+                  subject={interview?.subject || ''}
+                  difficulty={interview?.difficulty || ''}
+                  date={new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                  score={report.score}
+                  scoreColors={scoreColors}
+                />
                 <div className="bg-white rounded-[2.5rem] p-8 shadow-xl">
                   <div className="flex items-center gap-3 mb-4">
                     <div className="w-8 h-8 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600 font-black text-sm">📋</div>
@@ -561,36 +432,7 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
                   <p className="text-gray-700 leading-relaxed text-base font-medium border-l-4 border-indigo-200 pl-4 italic">{report.summary}</p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="bg-white rounded-[2.5rem] p-8 shadow-xl">
-                    <div className="flex items-center gap-3 mb-5">
-                      <div className="w-8 h-8 rounded-xl bg-emerald-100 flex items-center justify-center text-lg">✅</div>
-                      <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-emerald-600">Key Strengths</h3>
-                    </div>
-                    <div className="space-y-3">
-                      {report.strengths?.length ? report.strengths.map((s, i) => (
-                        <div key={i} className="flex items-start gap-3 p-3 bg-emerald-50 rounded-2xl border border-emerald-100">
-                          <span className="text-emerald-500 font-black text-sm mt-0.5">→</span>
-                          <p className="text-emerald-800 text-xs font-bold leading-relaxed">{s}</p>
-                        </div>
-                      )) : <p className="text-gray-300 text-xs">No strengths recorded.</p>}
-                    </div>
-                  </div>
-                  <div className="bg-white rounded-[2.5rem] p-8 shadow-xl">
-                    <div className="flex items-center gap-3 mb-5">
-                      <div className="w-8 h-8 rounded-xl bg-amber-100 flex items-center justify-center text-lg">🎯</div>
-                      <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-amber-600">Areas for Growth</h3>
-                    </div>
-                    <div className="space-y-3">
-                      {report.improvements?.length ? report.improvements.map((im, i) => (
-                        <div key={i} className="flex items-start gap-3 p-3 bg-amber-50 rounded-2xl border border-amber-100">
-                          <span className="text-amber-500 font-black text-sm mt-0.5">→</span>
-                          <p className="text-amber-800 text-xs font-bold leading-relaxed">{im}</p>
-                        </div>
-                      )) : <p className="text-gray-300 text-xs">No improvements recorded.</p>}
-                    </div>
-                  </div>
-                </div>
+                <StrengthsImprovements strengths={report.strengths} improvements={report.improvements} />
 
                 <div className="grid grid-cols-3 gap-4">
                   <div className="bg-white rounded-[2rem] p-6 shadow-xl text-center">
@@ -607,20 +449,12 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
                   </div>
                 </div>
 
-                <div className="bg-white rounded-[2.5rem] p-6 shadow-xl flex flex-col gap-3">
-                  <button
-                    onClick={() => router.replace('/dashboard')}
-                    className="w-full bg-gray-900 text-white py-5 rounded-[1.5rem] font-black uppercase text-xs tracking-[0.2em] hover:bg-indigo-600 transition-all shadow-xl"
-                  >
-                    🏠 Save & Return to Student Dashboard
-                  </button>
-                  <button
-                    onClick={handleDownloadPDF}
-                    className="w-full bg-indigo-50 text-indigo-700 py-5 rounded-[1.5rem] font-black uppercase text-xs tracking-[0.2em] hover:bg-indigo-100 transition-all border border-indigo-100"
-                  >
-                    📄 Download Chat as PDF
-                  </button>
-                </div>
+                <ReportActions
+                  onDownloadPDF={handleDownloadPDF}
+                  onBack={() => router.replace('/dashboard')}
+                  backLabel="🏠 Save & Return to Student Dashboard"
+                  downloadLabel="📄 Download Chat as PDF"
+                />
               </div>
             )}
           </div>

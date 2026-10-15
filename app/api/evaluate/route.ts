@@ -1,14 +1,26 @@
 import { NextResponse } from 'next/server';
 import Groq from 'groq-sdk';
+import { createClient } from '@supabase/supabase-js';
 
 const groq = new Groq({ 
   apiKey: process.env.GROQ_API_KEY 
 });
 
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
 export async function POST(req: Request) {
   console.log("🚀 EVALUATION STARTED: Request received");
 
   try {
+    const token = req.headers.get('Authorization')?.replace('Bearer ', '');
+    if (!token) return NextResponse.json({ error: 'Not authenticated.' }, { status: 401 });
+
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+    if (authError || !user) return NextResponse.json({ error: 'Not authenticated.' }, { status: 401 });
+
     const { history, subject } = await req.json();
 
     if (!history || history.length === 0) {
@@ -33,7 +45,7 @@ export async function POST(req: Request) {
           content: `Transcript: ${JSON.stringify(history)}` 
         }
       ],
-      model: "llama-3.3-70b-versatile",
+      model: "openai/gpt-oss-20b",
       // Force JSON mode
       response_format: { type: "json_object" },
       temperature: 0.2, 

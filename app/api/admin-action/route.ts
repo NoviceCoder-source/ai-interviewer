@@ -1,14 +1,12 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { requireAdmin, supabaseAdmin } from '../../lib/requireAdmin';
 
 export async function POST(req: Request) {
   try {
-    const { studentId, studentEmail, studentName, action } = await req.json();
+    const auth = await requireAdmin(req);
+    if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+
+    const { studentId, studentEmail, action } = await req.json();
 
     if (!studentId || !action) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });

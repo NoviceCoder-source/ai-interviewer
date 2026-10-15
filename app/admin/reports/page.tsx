@@ -28,11 +28,6 @@ export default function AdminReportsPage() {
 
   useEffect(() => {
     const load = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { router.push('/'); return; }
-      const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-      if (!profile || profile.role !== 'admin') { router.push('/'); return; }
-
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { router.push('/'); return; }
 

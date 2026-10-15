@@ -13,7 +13,6 @@ interface SiteSettingsForm {
 
 export default function AdminSettingsPage() {
   const router = useRouter();
-  const [loadingAuth, setLoadingAuth] = useState(true);
   const [loadingSettings, setLoadingSettings] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -30,19 +29,6 @@ export default function AdminSettingsPage() {
   const [subjectsInput, setSubjectsInput] = useState('');
 
   useEffect(() => {
-    const checkAdmin = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { router.push('/'); return; }
-      const { data: profile } = await supabase
-        .from('profiles').select('role').eq('id', user.id).single();
-      if (!profile || profile.role !== 'admin') { router.push('/'); return; }
-      setLoadingAuth(false);
-    };
-    checkAdmin();
-  }, [router]);
-
-  useEffect(() => {
-    if (loadingAuth) return;
     const loadSettings = async () => {
       const { data, error: fetchError } = await supabase
         .from('site_settings').select('*').eq('id', 1).single();
@@ -59,7 +45,7 @@ export default function AdminSettingsPage() {
       setLoadingSettings(false);
     };
     loadSettings();
-  }, [loadingAuth]);
+  }, []);
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -120,7 +106,7 @@ export default function AdminSettingsPage() {
     }
   };
 
-  if (loadingAuth || loadingSettings) {
+  if (loadingSettings) {
     return (
       <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center">
         <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4" />

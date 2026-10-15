@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from './lib/supabase';
 import { useSiteSettings } from './lib/SiteSettingsContext';
+import { Mic, BarChart3, TrendingUp, User, Lock, Eye, EyeOff, ArrowRight, Mail, Phone, UserPlus } from 'lucide-react';
 
 type Mode = 'login' | 'register';
 
@@ -10,14 +11,14 @@ export default function Home() {
   const router = useRouter();
   const settings = useSiteSettings();
   const [mode, setMode] = useState<Mode>('login');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // Login states
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
 
-  // Register states
   const [fullName, setFullName] = useState('');
   const [contact, setContact] = useState('');
   const [email, setEmail] = useState('');
@@ -28,12 +29,15 @@ export default function Home() {
   const [registerLoading, setRegisterLoading] = useState(false);
   const [registerSuccess, setRegisterSuccess] = useState(false);
 
-  // ── Login Handler ──────────────────────────────────────────────────────────
+  const secondaryBg = { backgroundColor: 'var(--color-secondary)' };
+  const secondaryText = { color: 'var(--color-secondary)' };
+  const secondaryTint = (pct: number) => ({ backgroundColor: `color-mix(in srgb, var(--color-secondary) ${pct}%, transparent)` });
+
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
     setLoginLoading(true);
-
     try {
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
@@ -45,33 +49,19 @@ export default function Home() {
         setLoginError('Username not found. Please check your username.');
         return;
       }
-
       if (profile.status === 'pending') {
         setLoginError('Your account is still pending approval.');
         return;
       }
-
       if (profile.status === 'rejected') {
         setLoginError(`Your account has been rejected. Please contact ${settings.org_name}.`);
         return;
       }
 
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: profile.email,
-        password,
-      });
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email: profile.email, password });
+      if (signInError) { setLoginError('Incorrect password. Please try again.'); return; }
 
-      if (signInError) {
-        setLoginError('Incorrect password. Please try again.');
-        return;
-      }
-
-      if (profile.role === 'admin') {
-        router.push('/admin/dashboard');
-      } else {
-        router.push('/dashboard');
-      }
-
+      router.push(profile.role === 'admin' ? '/admin/dashboard' : '/dashboard');
     } catch (err) {
       console.error('Login error:', err);
       setLoginError('Something went wrong. Please try again.');
@@ -80,57 +70,29 @@ export default function Home() {
     }
   };
 
-  // ── Register Handler ───────────────────────────────────────────────────────
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setRegisterError('');
 
-    // Validate username
-    if (regUsername.trim().length < 3) {
-      setRegisterError('Username must be at least 3 characters.');
-      return;
-    }
-
-    if (!/^[a-zA-Z0-9_]+$/.test(regUsername.trim())) {
-      setRegisterError('Username can only contain letters, numbers, and underscores.');
-      return;
-    }
-
-    // Validate password
-    if (regPassword.length < 8) {
-      setRegisterError('Password must be at least 8 characters.');
-      return;
-    }
-
-    if (regPassword !== regConfirmPassword) {
-      setRegisterError('Passwords do not match.');
-      return;
-    }
+    if (regUsername.trim().length < 3) { setRegisterError('Username must be at least 3 characters.'); return; }
+    if (!/^[a-zA-Z0-9_]+$/.test(regUsername.trim())) { setRegisterError('Username can only contain letters, numbers, and underscores.'); return; }
+    if (regPassword.length < 8) { setRegisterError('Password must be at least 8 characters.'); return; }
+    if (regPassword !== regConfirmPassword) { setRegisterError('Passwords do not match.'); return; }
 
     setRegisterLoading(true);
-
     try {
       const res = await fetch('/api/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          fullName,
-          contact,
-          email,
+          fullName, contact, email,
           username: regUsername.trim().toLowerCase(),
           password: regPassword,
         }),
       });
-
       const data = await res.json();
-
-      if (!res.ok) {
-        setRegisterError(data.error || 'Registration failed.');
-        return;
-      }
-
+      if (!res.ok) { setRegisterError(data.error || 'Registration failed.'); return; }
       setRegisterSuccess(true);
-
     } catch (err) {
       console.error('Registration error:', err);
       setRegisterError('Something went wrong. Please try again.');
@@ -139,210 +101,272 @@ export default function Home() {
     }
   };
 
-  // ── Success Screen ─────────────────────────────────────────────────────────
   if (registerSuccess) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary via-secondary to-pink-500 p-4">
-        <div className="bg-white/10 backdrop-blur-lg p-10 rounded-2xl shadow-2xl border border-white/20 w-full max-w-sm text-center">
+      <main className="min-h-screen bg-[#f7faff] flex items-center justify-center p-6">
+        <div className="w-full max-w-[440px] rounded-[28px] border border-[#e4edf7] bg-white p-10 text-center shadow-[0_20px_60px_rgba(25,80,140,0.10)]">
           <div className="text-5xl mb-4">✅</div>
-          <h1 className="text-2xl font-extrabold text-white mb-2">Registration Submitted!</h1>
-          <p className="text-primary text-sm font-medium">
+          <h1 className="text-2xl font-bold text-[#102b58] mb-2">Registration submitted</h1>
+          <p className="text-sm text-[#7690b1]">
             Your registration has been sent to {settings.org_name} staff for approval.
             You will receive an email once your account is approved or rejected.
           </p>
           <button
             onClick={() => { setRegisterSuccess(false); setMode('login'); }}
-            className="mt-6 w-full bg-white text-primary font-bold py-3 px-4 rounded-xl hover:scale-105 transition-all"
+            style={secondaryBg}
+            className="mt-7 w-full h-[52px] rounded-xl text-white font-semibold shadow-lg shadow-blue-200 hover:opacity-90 transition-all"
           >
             Back to Login
           </button>
         </div>
-      </div>
+      </main>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary via-secondary to-pink-500 p-4">
-      <div className="bg-white/10 backdrop-blur-lg p-10 rounded-2xl shadow-2xl border border-white/20 w-full max-w-sm">
+    <main className="min-h-screen bg-[#f7faff]">
+      <div className="flex min-h-screen">
 
-        <div className="text-center mb-8">
-          {settings.logo_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={settings.logo_url}
-              alt={settings.org_name}
-              className="h-16 mx-auto mb-3 object-contain"
-            />
-          ) : (
-            <div className="text-5xl mb-3">🎓</div>
-          )}
-          <h1 className="text-3xl font-extrabold text-white">{settings.org_name}</h1>
-          <p className="text-indigo-100 text-sm font-medium mt-1">AI Interview Practice Platform</p>
-        </div>
+        {/* LEFT SIDE */}
+        <section className="relative hidden w-1/2 overflow-hidden lg:flex" style={{ background: `linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 6%, #eef7ff), color-mix(in srgb, var(--color-secondary) 14%, #eef7ff))` }}>
+          <div className="absolute -left-32 top-32 h-[420px] w-[420px] rounded-full" style={secondaryTint(15)} />
+          <div className="absolute -bottom-32 -right-20 h-[400px] w-[400px] rounded-full" style={secondaryTint(20)} />
 
-        {/* Mode Toggle */}
-        <div className="flex rounded-xl border border-white/20 overflow-hidden mb-8">
-          <button
-            onClick={() => { setMode('login'); setLoginError(''); }}
-            className={`flex-1 py-3 text-sm font-bold transition-all ${
-              mode === 'login' ? 'bg-white text-primary' : 'bg-transparent text-white hover:bg-white/10'
-            }`}
-          >
-            Login
-          </button>
-          <button
-            onClick={() => { setMode('register'); setRegisterError(''); }}
-            className={`flex-1 py-3 text-sm font-bold transition-all ${
-              mode === 'register' ? 'bg-white text-primary' : 'bg-transparent text-white hover:bg-white/10'
-            }`}
-          >
-            Register
-          </button>
-        </div>
-
-        {/* LOGIN FORM */}
-        {mode === 'login' && (
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="block text-white text-sm font-bold mb-1">Username</label>
-              <input
-                type="text"
-                required
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Enter your username"
-                className="w-full bg-white/20 text-white placeholder-white/50 border border-white/30 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-white/50"
-              />
-            </div>
-            <div>
-              <label className="block text-white text-sm font-bold mb-1">Password</label>
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter your password"
-                className="w-full bg-white/20 text-white placeholder-white/50 border border-white/30 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-white/50"
-              />
+          <div className="relative z-10 flex w-full flex-col px-16 py-12">
+            <div className="flex items-center gap-3">
+              {settings.logo_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={settings.logo_url} alt={settings.org_name} className="h-11 object-contain" />
+              ) : (
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl" style={secondaryBg}>
+                  <div className="flex items-end gap-[3px]">
+                    <span className="h-3 w-[3px] rounded-full bg-white" />
+                    <span className="h-6 w-[3px] rounded-full bg-white" />
+                    <span className="h-9 w-[3px] rounded-full bg-white" />
+                    <span className="h-5 w-[3px] rounded-full bg-white" />
+                    <span className="h-3 w-[3px] rounded-full bg-white" />
+                  </div>
+                </div>
+              )}
+              <span className="text-2xl font-bold text-[#102b58]">{settings.org_name}</span>
             </div>
 
-            {loginError && (
-              <p className="text-red-200 text-xs font-bold bg-red-500/20 px-3 py-2 rounded-lg">
-                ⚠️ {loginError}
+            <div className="mt-20 max-w-[620px]">
+              <h1 className="text-[46px] font-bold leading-[1.1] tracking-tight text-[#102b58]">
+                Your AI Interview
+                <span className="block" style={secondaryText}>Practice Platform</span>
+              </h1>
+              <p className="mt-6 max-w-[560px] text-lg leading-8 text-[#55749d]">
+                Build your confidence, improve your skills, and get ready for your dream job.
               </p>
-            )}
 
-            <button
-              type="submit"
-              disabled={loginLoading}
-              className="w-full bg-white text-primary font-bold py-3 px-4 rounded-xl shadow-md hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loginLoading ? 'Logging in...' : 'Login'}
-            </button>
+              <div className="mt-9 flex gap-8">
+                <Feature icon={<Mic size={22} />} title="Realistic" subtitle="Interviews" accent={secondaryText} />
+                <Feature icon={<BarChart3 size={22} />} title="Instant" subtitle="Feedback" accent={secondaryText} />
+                <Feature icon={<TrendingUp size={22} />} title="Track" subtitle="Progress" accent={secondaryText} />
+              </div>
+            </div>
+          </div>
+        </section>
 
-            <p className="text-center text-white/60 text-xs">
-              New student?{' '}
-              <button type="button" onClick={() => setMode('register')} className="text-white font-bold underline">
-                Register here
-              </button>
+        {/* RIGHT SIDE */}
+        <section className="flex flex-1 items-center justify-center bg-[#f8fbff] px-6 py-10">
+          <div className="w-full max-w-[480px]">
+            <div className="rounded-[28px] border border-[#e4edf7] bg-white p-8 shadow-[0_20px_60px_rgba(25,80,140,0.10)] sm:p-10">
+
+              <div className="text-center">
+                {settings.logo_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={settings.logo_url} alt={settings.org_name} className="mx-auto h-12 object-contain" />
+                ) : (
+                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl" style={secondaryTint(12)}>
+                    <div className="flex items-end gap-[3px]">
+                      <span className="h-4 w-[4px] rounded-full" style={secondaryBg} />
+                      <span className="h-7 w-[4px] rounded-full" style={secondaryBg} />
+                      <span className="h-10 w-[4px] rounded-full" style={secondaryBg} />
+                      <span className="h-6 w-[4px] rounded-full" style={secondaryBg} />
+                      <span className="h-4 w-[4px] rounded-full" style={secondaryBg} />
+                    </div>
+                  </div>
+                )}
+                <h2 className="mt-4 text-3xl font-bold tracking-tight text-[#102b58]">{settings.org_name}</h2>
+                <p className="mt-2 text-sm text-[#7690b1]">AI Interview Practice Platform</p>
+              </div>
+
+              <div className="mt-8 flex rounded-2xl bg-[#f2f7fc] p-1">
+                <button
+                  onClick={() => { setMode('login'); setLoginError(''); }}
+                  style={mode === 'login' ? secondaryBg : undefined}
+                  className={`flex-1 rounded-xl py-3 text-sm font-semibold transition-all ${mode === 'login' ? 'text-white shadow-md shadow-blue-200' : 'text-[#6682a5]'}`}
+                >
+                  Login
+                </button>
+                <button
+                  onClick={() => { setMode('register'); setRegisterError(''); }}
+                  style={mode === 'register' ? secondaryBg : undefined}
+                  className={`flex-1 rounded-xl py-3 text-sm font-semibold transition-all ${mode === 'register' ? 'text-white shadow-md shadow-blue-200' : 'text-[#6682a5]'}`}
+                >
+                  Register
+                </button>
+              </div>
+
+              {mode === 'login' ? (
+                <form onSubmit={handleLogin} className="mt-7 space-y-4">
+                  <div>
+                    <label className="mb-2 block text-sm font-semibold text-[#102b58]">Username</label>
+                    <div className="relative">
+                      <User size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#88a2c1]" />
+                      <input
+                        type="text" required value={username} onChange={(e) => setUsername(e.target.value)}
+                        placeholder="Enter your username"
+                        className="h-[52px] w-full rounded-xl border border-[#d7e4f1] bg-white pl-12 pr-4 text-sm text-[#102b58] outline-none transition-all placeholder:text-[#9aafc7] focus:border-[var(--color-secondary)] focus:ring-4"
+                        style={{ boxShadow: 'none' }}
+                        onFocus={(e) => (e.currentTarget.style.boxShadow = `0 0 0 4px color-mix(in srgb, var(--color-secondary) 10%, transparent)`)}
+                        onBlur={(e) => (e.currentTarget.style.boxShadow = 'none')}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-sm font-semibold text-[#102b58]">Password</label>
+                    <div className="relative">
+                      <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#88a2c1]" />
+                      <input
+                        type={showPassword ? 'text' : 'password'} required value={password} onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Enter your password"
+                        className="h-[52px] w-full rounded-xl border border-[#d7e4f1] bg-white pl-12 pr-12 text-sm text-[#102b58] outline-none transition-all placeholder:text-[#9aafc7]"
+                        onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--color-secondary)'; e.currentTarget.style.boxShadow = `0 0 0 4px color-mix(in srgb, var(--color-secondary) 10%, transparent)`; }}
+                        onBlur={(e) => { e.currentTarget.style.borderColor = '#d7e4f1'; e.currentTarget.style.boxShadow = 'none'; }}
+                      />
+                      <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#7894b5]">
+                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {loginError && (
+                    <p className="text-red-500 text-xs font-semibold bg-red-50 px-3 py-2 rounded-lg">{loginError}</p>
+                  )}
+
+                  <button
+                    type="submit" disabled={loginLoading} style={secondaryBg}
+                    className="group mt-2 flex h-[52px] w-full items-center justify-center gap-2 rounded-xl text-white text-base font-semibold shadow-lg shadow-blue-200 hover:opacity-90 transition-all disabled:opacity-50"
+                  >
+                    {loginLoading ? 'Logging in...' : 'Login'}
+                    <ArrowRight size={19} className="transition-transform group-hover:translate-x-1" />
+                  </button>
+
+                  <p className="mt-5 text-center text-sm text-[#7892b2]">
+                    New student?{' '}
+                    <button type="button" onClick={() => setMode('register')} className="font-semibold hover:underline" style={secondaryText}>
+                      Register here
+                    </button>
+                  </p>
+                </form>
+              ) : (
+                <form onSubmit={handleRegister} className="mt-7 space-y-4">
+                  <div>
+                    <label className="mb-2 block text-sm font-semibold text-[#102b58]">Full Name</label>
+                    <div className="relative">
+                      <User size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#88a2c1]" />
+                      <input type="text" required value={fullName} onChange={(e) => setFullName(e.target.value)}
+                        placeholder="Enter your full name"
+                        className="h-[52px] w-full rounded-xl border border-[#d7e4f1] bg-white pl-12 pr-4 text-sm text-[#102b58] outline-none placeholder:text-[#9aafc7]" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-sm font-semibold text-[#102b58]">Contact Number</label>
+                    <div className="relative">
+                      <Phone size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#88a2c1]" />
+                      <input type="tel" required value={contact} onChange={(e) => setContact(e.target.value)}
+                        placeholder="Enter your contact number"
+                        className="h-[52px] w-full rounded-xl border border-[#d7e4f1] bg-white pl-12 pr-4 text-sm text-[#102b58] outline-none placeholder:text-[#9aafc7]" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-sm font-semibold text-[#102b58]">Email Address</label>
+                    <div className="relative">
+                      <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#88a2c1]" />
+                      <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
+                        placeholder="Enter your email"
+                        className="h-[52px] w-full rounded-xl border border-[#d7e4f1] bg-white pl-12 pr-4 text-sm text-[#102b58] outline-none placeholder:text-[#9aafc7]" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-sm font-semibold text-[#102b58]">Choose a Username</label>
+                    <div className="relative">
+                      <UserPlus size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#88a2c1]" />
+                      <input type="text" required value={regUsername} onChange={(e) => setRegUsername(e.target.value)}
+                        placeholder="e.g. sarthak123"
+                        className="h-[52px] w-full rounded-xl border border-[#d7e4f1] bg-white pl-12 pr-4 text-sm text-[#102b58] outline-none placeholder:text-[#9aafc7]" />
+                    </div>
+                    <p className="text-[#9aafc7] text-xs mt-1">Letters, numbers, and underscores only.</p>
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-sm font-semibold text-[#102b58]">Choose a Password</label>
+                    <div className="relative">
+                      <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#88a2c1]" />
+                      <input type={showPassword ? 'text' : 'password'} required value={regPassword} onChange={(e) => setRegPassword(e.target.value)}
+                        placeholder="At least 8 characters"
+                        className="h-[52px] w-full rounded-xl border border-[#d7e4f1] bg-white pl-12 pr-12 text-sm text-[#102b58] outline-none placeholder:text-[#9aafc7]" />
+                      <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#7894b5]">
+                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-sm font-semibold text-[#102b58]">Confirm Password</label>
+                    <div className="relative">
+                      <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#88a2c1]" />
+                      <input type={showConfirmPassword ? 'text' : 'password'} required value={regConfirmPassword} onChange={(e) => setRegConfirmPassword(e.target.value)}
+                        placeholder="Repeat your password"
+                        className="h-[52px] w-full rounded-xl border border-[#d7e4f1] bg-white pl-12 pr-12 text-sm text-[#102b58] outline-none placeholder:text-[#9aafc7]" />
+                      <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#7894b5]">
+                        {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {registerError && (
+                    <p className="text-red-500 text-xs font-semibold bg-red-50 px-3 py-2 rounded-lg">{registerError}</p>
+                  )}
+
+                  <button
+                    type="submit" disabled={registerLoading} style={secondaryBg}
+                    className="group mt-2 flex h-[52px] w-full items-center justify-center gap-2 rounded-xl text-white text-base font-semibold shadow-lg shadow-blue-200 hover:opacity-90 transition-all disabled:opacity-50"
+                  >
+                    {registerLoading ? 'Submitting...' : 'Create Account'}
+                    <ArrowRight size={19} className="transition-transform group-hover:translate-x-1" />
+                  </button>
+
+                  <p className="mt-5 text-center text-sm text-[#7892b2]">
+                    Already have an account?{' '}
+                    <button type="button" onClick={() => setMode('login')} className="font-semibold hover:underline" style={secondaryText}>
+                      Login here
+                    </button>
+                  </p>
+                </form>
+              )}
+            </div>
+
+            <p className="mt-6 text-center text-xs text-[#9aadc4]">
+              Practice smarter • Improve faster • Get hired
             </p>
-          </form>
-        )}
+          </div>
+        </section>
+      </div>
+    </main>
+  );
+}
 
-        {/* REGISTER FORM */}
-        {mode === 'register' && (
-          <form onSubmit={handleRegister} className="space-y-4">
-            <div>
-              <label className="block text-white text-sm font-bold mb-1">Full Name</label>
-              <input
-                type="text"
-                required
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                placeholder="Enter your full name"
-                className="w-full bg-white/20 text-white placeholder-white/50 border border-white/30 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-white/50"
-              />
-            </div>
-            <div>
-              <label className="block text-white text-sm font-bold mb-1">Contact Number</label>
-              <input
-                type="tel"
-                required
-                value={contact}
-                onChange={(e) => setContact(e.target.value)}
-                placeholder="Enter your contact number"
-                className="w-full bg-white/20 text-white placeholder-white/50 border border-white/30 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-white/50"
-              />
-            </div>
-            <div>
-              <label className="block text-white text-sm font-bold mb-1">Email Address</label>
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="Enter your email"
-                className="w-full bg-white/20 text-white placeholder-white/50 border border-white/30 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-white/50"
-              />
-            </div>
-            <div>
-              <label className="block text-white text-sm font-bold mb-1">Choose a Username</label>
-              <input
-                type="text"
-                required
-                value={regUsername}
-                onChange={(e) => setRegUsername(e.target.value)}
-                placeholder="e.g. sarthak123"
-                className="w-full bg-white/20 text-white placeholder-white/50 border border-white/30 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-white/50"
-              />
-              <p className="text-white/50 text-xs mt-1">Letters, numbers, and underscores only.</p>
-            </div>
-            <div>
-              <label className="block text-white text-sm font-bold mb-1">Choose a Password</label>
-              <input
-                type="password"
-                required
-                value={regPassword}
-                onChange={(e) => setRegPassword(e.target.value)}
-                placeholder="At least 8 characters"
-                className="w-full bg-white/20 text-white placeholder-white/50 border border-white/30 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-white/50"
-              />
-            </div>
-            <div>
-              <label className="block text-white text-sm font-bold mb-1">Confirm Password</label>
-              <input
-                type="password"
-                required
-                value={regConfirmPassword}
-                onChange={(e) => setRegConfirmPassword(e.target.value)}
-                placeholder="Repeat your password"
-                className="w-full bg-white/20 text-white placeholder-white/50 border border-white/30 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-white/50"
-              />
-            </div>
-
-            {registerError && (
-              <p className="text-red-200 text-xs font-bold bg-red-500/20 px-3 py-2 rounded-lg">
-                ⚠️ {registerError}
-              </p>
-            )}
-
-            <button
-              type="submit"
-              disabled={registerLoading}
-              className="w-full bg-white text-primary font-bold py-3 px-4 rounded-xl shadow-md hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {registerLoading ? 'Submitting...' : 'Submit Registration'}
-            </button>
-
-            <p className="text-center text-white/60 text-xs">
-              Already have an account?{' '}
-              <button type="button" onClick={() => setMode('login')} className="text-white font-bold underline">
-                Login here
-              </button>
-            </p>
-          </form>
-        )}
-
+function Feature({ icon, title, subtitle, accent }: { icon: React.ReactNode; title: string; subtitle: string; accent: React.CSSProperties }) {
+  return (
+    <div className="flex items-center gap-3">
+      <div className="flex h-11 w-11 items-center justify-center rounded-full bg-white shadow-sm" style={accent}>
+        {icon}
+      </div>
+      <div>
+        <p className="text-sm font-semibold text-[#214875]">{title}</p>
+        <p className="text-sm text-[#55749d]">{subtitle}</p>
       </div>
     </div>
   );

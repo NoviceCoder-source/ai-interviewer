@@ -24,28 +24,21 @@ export default function AdminDashboard() {
   const [adminName, setAdminName] = useState('Admin');
 
   useEffect(() => {
-    const checkAdmin = async () => {
+    const loadAdminName = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        router.push('/');
-        return;
-      }
+      if (!user) return;
 
       const { data: profile } = await supabase
         .from('profiles')
-        .select('full_name, role')
+        .select('full_name')
         .eq('id', user.id)
         .single();
 
-      if (!profile || profile.role !== 'admin') {
-        router.push('/');
-        return;
-      }
-      if (profile.full_name) setAdminName(profile.full_name);
+      if (profile?.full_name) setAdminName(profile.full_name);
     };
 
-    checkAdmin();
-  }, [router]);
+    loadAdminName();
+  }, []);
 
   const fetchStudents = async (status: FilterStatus) => {
     setLoading(true);
@@ -76,17 +69,23 @@ export default function AdminDashboard() {
   }, [activeTab]);
 
   const handleStatusChange = async (student: Student, newStatus: 'approve' | 'reject') => {
-    try {
-      const response = await fetch('/api/admin-action', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          studentId: student.id,
-          action: newStatus,
-          studentEmail: student.email || 'No Email Provided',
-          studentName: student.full_name,
-        }),
-      });
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { alert('You must be logged in.'); return; }
+
+    const response = await fetch('/api/admin-action', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({
+        studentId: student.id,
+        action: newStatus,
+        studentEmail: student.email || 'No Email Provided',
+        studentName: student.full_name,
+      }),
+    });
 
       const result = await response.json();
 
