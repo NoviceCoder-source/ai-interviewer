@@ -24,8 +24,19 @@ export interface InterviewData extends InterviewSummary {
   chat_history: Message[];
 }
 
+export interface StudentRef {
+  full_name: string;
+  email: string;
+}
+
+/** Row in the admin reports list (no transcript). */
+export interface AdminInterviewSummary extends InterviewSummary {
+  profiles: StudentRef | null;
+}
+
+/** Full report as seen by an admin. */
 export interface AdminInterviewData extends InterviewData {
-  profiles: { full_name: string; email: string } | null;
+  profiles: StudentRef | null;
 }
 
 export interface Student {

@@ -52,14 +52,15 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  // Student dashboard: verify approved status
+  // Student dashboard: students only, and only once approved
   if (isStudentPath && user) {
     const { data: profile } = await supabase
       .from('profiles')
-      .select('status')
+      .select('status, role')
       .eq('id', user.id)
       .single();
 
+    if (profile?.role === 'admin') return NextResponse.redirect(new URL('/admin/dashboard', request.url));
     if (profile?.status === 'pending') return NextResponse.redirect(new URL('/pending', request.url));
     if (profile?.status === 'rejected') return NextResponse.redirect(new URL('/rejected', request.url));
   }

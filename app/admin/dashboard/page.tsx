@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase/browser';
 import { useSiteSettings } from '../../lib/SiteSettingsContext';
 import { api } from '../../lib/api';
 import type { Student } from '../../lib/types';
+import OrgLogo from '../../components/OrgLogo';
 
 type FilterStatus = 'pending' | 'approved' | 'rejected';
 
@@ -15,6 +16,7 @@ export default function AdminDashboard() {
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [adminName, setAdminName] = useState('Admin');
+  const [error, setError] = useState('');
 
   useEffect(() => {
     const loadAdminName = async () => {
@@ -35,11 +37,12 @@ export default function AdminDashboard() {
 
   const fetchStudents = async (status: FilterStatus) => {
     setLoading(true);
+    setError('');
     try {
       const { students } = await api.get<{ students: Student[] }>(`/api/admin/students?status=${status}`);
       setStudents(students);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Could not load students.');
+      setError(err instanceof Error ? err.message : 'Could not load students.');
     } finally {
       setLoading(false);
     }
@@ -50,11 +53,12 @@ export default function AdminDashboard() {
   }, [activeTab]);
 
   const handleStatusChange = async (student: Student, action: 'approve' | 'reject') => {
+    setError('');
     try {
       await api.post(`/api/admin/students/${student.id}`, { action });
       setStudents((prev) => prev.filter((item) => item.id !== student.id));
     } catch (err) {
-      alert(`Action failed: ${err instanceof Error ? err.message : 'Could not complete operation.'}`);
+      setError(`Action failed: ${err instanceof Error ? err.message : 'Could not complete operation.'}`);
     }
   };
 
@@ -68,10 +72,7 @@ export default function AdminDashboard() {
       {/* Upper Navigation Header Grid */}
       <div className="flex justify-between items-center mb-10 max-w-6xl mx-auto">
         <div className="flex items-center gap-3">
-          {settings.logo_url && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={settings.logo_url} alt={settings.org_name} className="h-9 object-contain" />
-          )}
+          <OrgLogo className="h-9" fallback={null} />
           <div>
             <h1 className="text-3xl font-extrabold tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400">
               🔐 {settings.org_name.toUpperCase()} <span className="text-indigo-400 font-medium text-2xl">ADMIN</span>
@@ -102,6 +103,12 @@ export default function AdminDashboard() {
 
       <div className="max-w-6xl mx-auto">
         {/* State Classification Sorting Tabs */}
+        {error && (
+          <p role="alert" className="mb-6 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-medium text-red-200">
+            {error}
+          </p>
+        )}
+
         <div className="flex space-x-4 mb-6">
           {(['pending', 'approved', 'rejected'] as FilterStatus[]).map((tab) => (
             <button

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { requireAdmin } from '../../../lib/auth';
 import { supabaseAdmin } from '../../../lib/supabase/admin';
 import { jsonError, serverError } from '../../../lib/http';
@@ -35,6 +36,9 @@ export async function POST(request: Request) {
       })
       .eq('id', 1);
     if (error) throw error;
+
+    // Pages are prerendered with the branding baked in; rebuild them with the new settings.
+    revalidatePath('/', 'layout');
 
     return NextResponse.json({ success: true });
   } catch (err) {

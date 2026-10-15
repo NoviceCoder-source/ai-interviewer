@@ -1,7 +1,7 @@
 // app/lib/pdfReport.ts
 import jsPDF from 'jspdf';
 import type { Message, EvaluationReport } from './types';
-import { stripMarkdown as stripMarkdownLocal } from './questionAnalysis';
+import { stripMarkdown } from './questionAnalysis';
 
 interface ReportPDFOptions {
   orgName: string;
@@ -62,10 +62,10 @@ export function generateInterviewPDF(opts: ReportPDFOptions): jsPDF {
   opts.chatHistory.forEach((msg) => {
     if (msg.role === 'assistant') {
       addText('Interviewer:', 10, true, [79, 70, 229]);
-      addText(stripMarkdownLocal(msg.content), 10, false, [30, 30, 30]);
+      addText(stripMarkdown(msg.content), 10, false, [30, 30, 30]);
     } else if (msg.role === 'user') {
       addText('Candidate:', 10, true, [16, 185, 129]);
-      addText(stripMarkdownLocal(msg.content), 10, false, [30, 30, 30]);
+      addText(stripMarkdown(msg.content), 10, false, [30, 30, 30]);
     }
     y += 2;
   });
@@ -73,4 +73,3 @@ export function generateInterviewPDF(opts: ReportPDFOptions): jsPDF {
   return doc;
 }
 
-// local import to avoid circular concerns; reuse the shared one

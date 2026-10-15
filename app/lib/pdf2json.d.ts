@@ -1,4 +1,4 @@
-// lib/types.d.ts
+// Type declarations for pdf2json (the package ships none).
 declare module 'pdf2json' {
     class PDFParser {
         // Use 'unknown' instead of 'any' to satisfy strict ESLint rules

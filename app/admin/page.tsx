@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '../lib/api';
 import { useSiteSettings } from '../lib/SiteSettingsContext';
+import OrgLogo from '../components/OrgLogo';
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -33,16 +34,12 @@ export default function AdminLoginPage() {
       <div className="bg-gray-900 p-10 rounded-2xl shadow-2xl border border-gray-800 w-full max-w-sm">
 
         <div className="text-center mb-8">
-          {settings.logo_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={settings.logo_url}
-              alt={settings.org_name}
-              className="h-14 mx-auto mb-3 object-contain"
-            />
-          ) : (
-            <div className="text-5xl mb-3">🔐</div>
-          )}
+          <OrgLogo
+            className="h-14 mx-auto mb-3"
+            fallback={
+              <div className="text-5xl mb-3">🔐</div>
+            }
+          />
           <h1 className="text-2xl font-extrabold text-white">Admin Portal</h1>
           <p className="text-gray-400 text-sm font-medium mt-1">{settings.org_name} Staff Access</p>
         </div>

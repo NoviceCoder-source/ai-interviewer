@@ -2,22 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '../../lib/api';
-
-interface Report {
-  score: number;
-  summary: string;
-  strengths: string[];
-  improvements: string[];
-}
-
-interface InterviewRow {
-  id: string;
-  subject: string;
-  difficulty: string;
-  created_at: string;
-  report: Report;
-  profiles: { full_name: string; email: string } | null;
-}
+import type { AdminInterviewSummary as InterviewRow } from '../../lib/types';
 
 export default function AdminReportsPage() {
   const router = useRouter();

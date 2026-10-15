@@ -17,6 +17,8 @@ input[type="password"]::-ms-clear {
   --color-foreground: var(--foreground);
   --color-primary: var(--color-primary);
   --color-secondary: var(--color-secondary);
+  --color-ink: #102b58;
+  --color-ink-soft: #183b69;
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }

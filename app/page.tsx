@@ -4,6 +4,8 @@ import { useRouter } from 'next/navigation';
 import { api } from './lib/api';
 import { useSiteSettings } from './lib/SiteSettingsContext';
 import { Mic, BarChart3, TrendingUp, User, Lock, Eye, EyeOff, ArrowRight, Mail, Phone, UserPlus } from 'lucide-react';
+import OrgLogo from './components/OrgLogo';
+import { secondaryBg, secondaryText, secondaryTint } from './lib/theme';
 
 type Mode = 'login' | 'register';
 
@@ -29,9 +31,6 @@ export default function Home() {
   const [registerLoading, setRegisterLoading] = useState(false);
   const [registerSuccess, setRegisterSuccess] = useState(false);
 
-  const secondaryBg = { backgroundColor: 'var(--color-secondary)' };
-  const secondaryText = { color: 'var(--color-secondary)' };
-  const secondaryTint = (pct: number) => ({ backgroundColor: `color-mix(in srgb, var(--color-secondary) ${pct}%, transparent)` });
 
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -77,7 +76,7 @@ export default function Home() {
       <main className="min-h-screen bg-[#f7faff] flex items-center justify-center p-6">
         <div className="w-full max-w-[440px] rounded-[28px] border border-[#e4edf7] bg-white p-10 text-center shadow-[0_20px_60px_rgba(25,80,140,0.10)]">
           <div className="text-5xl mb-4">✅</div>
-          <h1 className="text-2xl font-bold text-[#102b58] mb-2">Registration submitted</h1>
+          <h1 className="text-2xl font-bold text-ink mb-2">Registration submitted</h1>
           <p className="text-sm text-[#7690b1]">
             Your registration has been sent to {settings.org_name} staff for approval.
             You will receive an email once your account is approved or rejected.
@@ -105,25 +104,25 @@ export default function Home() {
 
           <div className="relative z-10 flex w-full flex-col px-16 py-12">
             <div className="flex items-center gap-3">
-              {settings.logo_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={settings.logo_url} alt={settings.org_name} className="h-11 object-contain" />
-              ) : (
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl" style={secondaryBg}>
-                  <div className="flex items-end gap-[3px]">
-                    <span className="h-3 w-[3px] rounded-full bg-white" />
-                    <span className="h-6 w-[3px] rounded-full bg-white" />
-                    <span className="h-9 w-[3px] rounded-full bg-white" />
-                    <span className="h-5 w-[3px] rounded-full bg-white" />
-                    <span className="h-3 w-[3px] rounded-full bg-white" />
+              <OrgLogo
+                className="h-11"
+                fallback={
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl" style={secondaryBg}>
+                    <div className="flex items-end gap-[3px]">
+                      <span className="h-3 w-[3px] rounded-full bg-white" />
+                      <span className="h-6 w-[3px] rounded-full bg-white" />
+                      <span className="h-9 w-[3px] rounded-full bg-white" />
+                      <span className="h-5 w-[3px] rounded-full bg-white" />
+                      <span className="h-3 w-[3px] rounded-full bg-white" />
+                    </div>
                   </div>
-                </div>
-              )}
-              <span className="text-2xl font-bold text-[#102b58]">{settings.org_name}</span>
+                }
+              />
+              <span className="text-2xl font-bold text-ink">{settings.org_name}</span>
             </div>
 
             <div className="mt-20 max-w-[620px]">
-              <h1 className="text-[46px] font-bold leading-[1.1] tracking-tight text-[#102b58]">
+              <h1 className="text-[46px] font-bold leading-[1.1] tracking-tight text-ink">
                 Your AI Interview
                 <span className="block" style={secondaryText}>Practice Platform</span>
               </h1>
@@ -146,21 +145,21 @@ export default function Home() {
             <div className="rounded-[28px] border border-[#e4edf7] bg-white p-8 shadow-[0_20px_60px_rgba(25,80,140,0.10)] sm:p-10">
 
               <div className="text-center">
-                {settings.logo_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={settings.logo_url} alt={settings.org_name} className="mx-auto h-12 object-contain" />
-                ) : (
-                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl" style={secondaryTint(12)}>
-                    <div className="flex items-end gap-[3px]">
-                      <span className="h-4 w-[4px] rounded-full" style={secondaryBg} />
-                      <span className="h-7 w-[4px] rounded-full" style={secondaryBg} />
-                      <span className="h-10 w-[4px] rounded-full" style={secondaryBg} />
-                      <span className="h-6 w-[4px] rounded-full" style={secondaryBg} />
-                      <span className="h-4 w-[4px] rounded-full" style={secondaryBg} />
+                <OrgLogo
+                  className="mx-auto h-12"
+                  fallback={
+                    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl" style={secondaryTint(12)}>
+                      <div className="flex items-end gap-[3px]">
+                        <span className="h-4 w-[4px] rounded-full" style={secondaryBg} />
+                        <span className="h-7 w-[4px] rounded-full" style={secondaryBg} />
+                        <span className="h-10 w-[4px] rounded-full" style={secondaryBg} />
+                        <span className="h-6 w-[4px] rounded-full" style={secondaryBg} />
+                        <span className="h-4 w-[4px] rounded-full" style={secondaryBg} />
+                      </div>
                     </div>
-                  </div>
-                )}
-                <h2 className="mt-4 text-3xl font-bold tracking-tight text-[#102b58]">{settings.org_name}</h2>
+                  }
+                />
+                <h2 className="mt-4 text-3xl font-bold tracking-tight text-ink">{settings.org_name}</h2>
                 <p className="mt-2 text-sm text-[#7690b1]">AI Interview Practice Platform</p>
               </div>
 
@@ -184,13 +183,13 @@ export default function Home() {
               {mode === 'login' ? (
                 <form onSubmit={handleLogin} className="mt-7 space-y-4">
                   <div>
-                    <label className="mb-2 block text-sm font-semibold text-[#102b58]">Username</label>
+                    <label className="mb-2 block text-sm font-semibold text-ink">Username</label>
                     <div className="relative">
                       <User size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#88a2c1]" />
                       <input
                         type="text" required value={username} onChange={(e) => setUsername(e.target.value)}
                         placeholder="Enter your username"
-                        className="h-[52px] w-full rounded-xl border border-[#d7e4f1] bg-white pl-12 pr-4 text-sm text-[#102b58] outline-none transition-all placeholder:text-[#9aafc7] focus:border-[var(--color-secondary)] focus:ring-4"
+                        className="h-[52px] w-full rounded-xl border border-[#d7e4f1] bg-white pl-12 pr-4 text-sm text-ink outline-none transition-all placeholder:text-[#9aafc7] focus:border-[var(--color-secondary)] focus:ring-4"
                         style={{ boxShadow: 'none' }}
                         onFocus={(e) => (e.currentTarget.style.boxShadow = `0 0 0 4px color-mix(in srgb, var(--color-secondary) 10%, transparent)`)}
                         onBlur={(e) => (e.currentTarget.style.boxShadow = 'none')}
@@ -198,13 +197,13 @@ export default function Home() {
                     </div>
                   </div>
                   <div>
-                    <label className="mb-2 block text-sm font-semibold text-[#102b58]">Password</label>
+                    <label className="mb-2 block text-sm font-semibold text-ink">Password</label>
                     <div className="relative">
                       <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#88a2c1]" />
                       <input
                         type={showPassword ? 'text' : 'password'} required value={password} onChange={(e) => setPassword(e.target.value)}
                         placeholder="Enter your password"
-                        className="h-[52px] w-full rounded-xl border border-[#d7e4f1] bg-white pl-12 pr-12 text-sm text-[#102b58] outline-none transition-all placeholder:text-[#9aafc7]"
+                        className="h-[52px] w-full rounded-xl border border-[#d7e4f1] bg-white pl-12 pr-12 text-sm text-ink outline-none transition-all placeholder:text-[#9aafc7]"
                         onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--color-secondary)'; e.currentTarget.style.boxShadow = `0 0 0 4px color-mix(in srgb, var(--color-secondary) 10%, transparent)`; }}
                         onBlur={(e) => { e.currentTarget.style.borderColor = '#d7e4f1'; e.currentTarget.style.boxShadow = 'none'; }}
                       />
@@ -236,61 +235,61 @@ export default function Home() {
               ) : (
                 <form onSubmit={handleRegister} className="mt-7 space-y-4">
                   <div>
-                    <label className="mb-2 block text-sm font-semibold text-[#102b58]">Full Name</label>
+                    <label className="mb-2 block text-sm font-semibold text-ink">Full Name</label>
                     <div className="relative">
                       <User size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#88a2c1]" />
                       <input type="text" required value={fullName} onChange={(e) => setFullName(e.target.value)}
                         placeholder="Enter your full name"
-                        className="h-[52px] w-full rounded-xl border border-[#d7e4f1] bg-white pl-12 pr-4 text-sm text-[#102b58] outline-none placeholder:text-[#9aafc7]" />
+                        className="h-[52px] w-full rounded-xl border border-[#d7e4f1] bg-white pl-12 pr-4 text-sm text-ink outline-none placeholder:text-[#9aafc7]" />
                     </div>
                   </div>
                   <div>
-                    <label className="mb-2 block text-sm font-semibold text-[#102b58]">Contact Number</label>
+                    <label className="mb-2 block text-sm font-semibold text-ink">Contact Number</label>
                     <div className="relative">
                       <Phone size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#88a2c1]" />
                       <input type="tel" required value={contact} onChange={(e) => setContact(e.target.value)}
                         placeholder="Enter your contact number"
-                        className="h-[52px] w-full rounded-xl border border-[#d7e4f1] bg-white pl-12 pr-4 text-sm text-[#102b58] outline-none placeholder:text-[#9aafc7]" />
+                        className="h-[52px] w-full rounded-xl border border-[#d7e4f1] bg-white pl-12 pr-4 text-sm text-ink outline-none placeholder:text-[#9aafc7]" />
                     </div>
                   </div>
                   <div>
-                    <label className="mb-2 block text-sm font-semibold text-[#102b58]">Email Address</label>
+                    <label className="mb-2 block text-sm font-semibold text-ink">Email Address</label>
                     <div className="relative">
                       <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#88a2c1]" />
                       <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
                         placeholder="Enter your email"
-                        className="h-[52px] w-full rounded-xl border border-[#d7e4f1] bg-white pl-12 pr-4 text-sm text-[#102b58] outline-none placeholder:text-[#9aafc7]" />
+                        className="h-[52px] w-full rounded-xl border border-[#d7e4f1] bg-white pl-12 pr-4 text-sm text-ink outline-none placeholder:text-[#9aafc7]" />
                     </div>
                   </div>
                   <div>
-                    <label className="mb-2 block text-sm font-semibold text-[#102b58]">Choose a Username</label>
+                    <label className="mb-2 block text-sm font-semibold text-ink">Choose a Username</label>
                     <div className="relative">
                       <UserPlus size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#88a2c1]" />
                       <input type="text" required value={regUsername} onChange={(e) => setRegUsername(e.target.value)}
                         placeholder="e.g. sarthak123"
-                        className="h-[52px] w-full rounded-xl border border-[#d7e4f1] bg-white pl-12 pr-4 text-sm text-[#102b58] outline-none placeholder:text-[#9aafc7]" />
+                        className="h-[52px] w-full rounded-xl border border-[#d7e4f1] bg-white pl-12 pr-4 text-sm text-ink outline-none placeholder:text-[#9aafc7]" />
                     </div>
                     <p className="text-[#9aafc7] text-xs mt-1">Letters, numbers, and underscores only.</p>
                   </div>
                   <div>
-                    <label className="mb-2 block text-sm font-semibold text-[#102b58]">Choose a Password</label>
+                    <label className="mb-2 block text-sm font-semibold text-ink">Choose a Password</label>
                     <div className="relative">
                       <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#88a2c1]" />
                       <input type={showPassword ? 'text' : 'password'} required value={regPassword} onChange={(e) => setRegPassword(e.target.value)}
                         placeholder="At least 8 characters"
-                        className="h-[52px] w-full rounded-xl border border-[#d7e4f1] bg-white pl-12 pr-12 text-sm text-[#102b58] outline-none placeholder:text-[#9aafc7]" />
+                        className="h-[52px] w-full rounded-xl border border-[#d7e4f1] bg-white pl-12 pr-12 text-sm text-ink outline-none placeholder:text-[#9aafc7]" />
                       <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#7894b5]">
                         {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                       </button>
                     </div>
                   </div>
                   <div>
-                    <label className="mb-2 block text-sm font-semibold text-[#102b58]">Confirm Password</label>
+                    <label className="mb-2 block text-sm font-semibold text-ink">Confirm Password</label>
                     <div className="relative">
                       <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#88a2c1]" />
                       <input type={showConfirmPassword ? 'text' : 'password'} required value={regConfirmPassword} onChange={(e) => setRegConfirmPassword(e.target.value)}
                         placeholder="Repeat your password"
-                        className="h-[52px] w-full rounded-xl border border-[#d7e4f1] bg-white pl-12 pr-12 text-sm text-[#102b58] outline-none placeholder:text-[#9aafc7]" />
+                        className="h-[52px] w-full rounded-xl border border-[#d7e4f1] bg-white pl-12 pr-12 text-sm text-ink outline-none placeholder:text-[#9aafc7]" />
                       <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#7894b5]">
                         {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                       </button>

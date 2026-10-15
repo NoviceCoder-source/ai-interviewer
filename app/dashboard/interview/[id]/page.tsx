@@ -6,7 +6,7 @@ import ReactMarkdown from 'react-markdown';
 import SyntaxHighlighter from 'react-syntax-highlighter';
 import { atomOneDark } from 'react-syntax-highlighter/dist/esm/styles/hljs';
 import { useSiteSettings } from '../../../lib/SiteSettingsContext';
-import type { Message, EvaluationReport } from '../../../lib/types';
+import type { Message, EvaluationReport, InterviewData } from '../../../lib/types';
 import { getScoreColor } from '../../../lib/scoreColors';
 import { MIN_QUESTIONS_TO_FINISH, countAnsweredQuestions } from '../../../lib/questionAnalysis';
 import { api } from '../../../lib/api';
@@ -15,19 +15,13 @@ import ScoreCard from '../../../components/ScoreCard';
 import StrengthsImprovements from '../../../components/StrengthsImprovements';
 import ReportActions from '../../../components/ReportActions';
 
-interface InterviewData {
-  id: string;
-  subject: string;
-  difficulty: string;
-  report?: EvaluationReport;
-  chat_history?: Message[];
-}
+type ActiveInterview = Pick<InterviewData, 'id' | 'subject' | 'difficulty'>;
 
 export default function InterviewRoom({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
   const interviewId = resolvedParams.id;
 
-  const [interview, setInterview] = useState<InterviewData | null>(null);
+  const [interview, setInterview] = useState<ActiveInterview | null>(null);
   const [chatHistory, setChatHistory] = useState<Message[]>([]);
   const [userInput, setUserInput] = useState('');
   const [isEvaluating, setIsEvaluating] = useState(false);
