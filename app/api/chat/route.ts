@@ -38,15 +38,22 @@ export async function POST(req: Request) {
       conversation = history;
     }
 
-    const { subjects } = await getSiteSettings();
-    let resumeContext: string | null = null;
-    if (interview.subject === RESUME_SUBJECT) {
-      const { data } = await supabaseAdmin.from('profiles').select('resume_context').eq('id', auth.userId).single();
-      resumeContext = data?.resume_context ?? null;
-    }
+    const { subjects, org_name } = await getSiteSettings();
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('full_name, resume_context')
+      .eq('id', auth.userId)
+      .single();
 
     const reply = await nextInterviewerTurn(
-      { subject: interview.subject, difficulty: interview.difficulty, resumeContext, focusSubjects: subjects },
+      {
+        subject: interview.subject,
+        difficulty: interview.difficulty,
+        resumeContext: interview.subject === RESUME_SUBJECT ? profile?.resume_context : null,
+        focusSubjects: subjects,
+        orgName: org_name,
+        candidateFirstName: profile?.full_name?.trim().split(/\s+/)[0] || null,
+      },
       conversation
     );
 

@@ -28,8 +28,8 @@ export function stripMarkdown(text: string): string {
 }
 
 export function extractQuestion(content: string): string {
-  // Every interviewer turn carries the same "**Next Question:**" label; it must not count as shared keywords.
-  const text = content.replace(/\*\*Next Question:\*\*/gi, ' ');
+  // Every interviewer turn carries the same "**Question:**" / "**Next Question:**" label; it must not count as shared keywords.
+  const text = content.replace(/\*\*(?:Next )?Question:\*\*/gi, ' ');
   const sentences = text.split(/(?<=[.?!])\s+/);
   const questionSentence = sentences.find((s) => s.trim().endsWith('?')) || sentences[sentences.length - 1];
   return questionSentence.toLowerCase().trim();
