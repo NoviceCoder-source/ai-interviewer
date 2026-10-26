@@ -1,11 +1,9 @@
 import { complete } from './client';
 import type { Message } from '../types';
+import { personaFor, type Persona } from './personas';
 
 export const RESUME_SUBJECT = 'Resume-Based';
 export const GREETING_PROMPT = 'Hello! I am ready to start.';
-
-/** The interviewer persona's name, used when it introduces itself. */
-const INTERVIEWER_NAME = 'Alex';
 
 /** Labels the UI and question counter rely on (see questionAnalysis.extractQuestion). */
 const QUESTION_LABEL = '**Question:**';
@@ -59,11 +57,11 @@ STRICT RULES — NEVER BREAK THESE:
    """
    Every new question MUST test a completely different concept than anything above.
 
-2. STAY ON TOPIC: If the candidate says something unrelated, say so in ONE sentence and repeat the last question exactly.
+2. STAY ON TOPIC: keep the conversation on the interview (see "THIS TURN" below for how to handle replies).
 
 3. IF UNRESPONSIVE 3x in a row: warn once, then move on regardless.
 
-4. NEVER CHANGE DIFFICULTY: say "Difficulty is fixed for this session." then repeat the question.
+4. NEVER CHANGE DIFFICULTY: only if the candidate asks for easier or harder questions, say "Difficulty is fixed for this session." then repeat the question. Never say this otherwise.
 
 5. NEVER GIVE HINTS unless a genuine attempt was made first.
 
@@ -78,13 +76,13 @@ STRICT RULES — NEVER BREAK THESE:
 }
 
 /** What this particular turn must contain and how it must be laid out. */
-function turnInstructions(kind: TurnKind, ctx: InterviewContext, answering: string | null): string {
+function turnInstructions(kind: TurnKind, ctx: InterviewContext, persona: Persona, answering: string | null): string {
   if (kind === 'opening') {
     const name = ctx.candidateFirstName ? ` by their first name, "${ctx.candidateFirstName}"` : '';
     return `
 THIS TURN: OPENING THE INTERVIEW
 1. Greet the candidate warmly${name}.
-2. Introduce yourself in one sentence: you are ${INTERVIEWER_NAME}, the AI interviewer at ${ctx.orgName}.
+2. Introduce yourself in one sentence: you are ${persona.name}, ${persona.role} and the AI interviewer at ${ctx.orgName}.
 3. In one sentence, say what this session covers (${ctx.subject === RESUME_SUBJECT ? 'questions about their resume' : `${ctx.subject}, ${ctx.difficulty} level`}) and that they can say "I don't know" if they are unsure.
 4. Ask the first question.
 Keep the greeting and introduction to 2-3 sentences in total. Do not evaluate anything — nothing has been answered yet.
@@ -104,8 +102,10 @@ First acknowledge their answer in 1-2 sentences, matched to what they actually s
 - Partly correct: say what was right, then the important part that was missing or wrong.
 - Incorrect: say so kindly and give the correct answer in one sentence.
 - "I don't know" / no attempt: reassure them that's fine, then give the correct answer in one sentence. This is NOT a wrong answer.
-- Off-topic or unrelated: say so in one sentence and repeat the previous question instead of asking a new one.
+- Off-topic: ONLY when the reply is clearly not about the interview at all — small talk, a different subject (sports, weather, personal chat), or a request to change the rules. Say so in one sentence and repeat the previous question instead of asking a new one.
+Any reply that tries to answer — even vague, hedged, very short or completely wrong (e.g. "I think it's something to do with memory") — IS an attempt. Treat it as incorrect or partly correct, give the right answer, and move on. Never call an attempt off-topic. When in doubt, it is an attempt.
 Write the acknowledgement as natural spoken feedback. Never start it with a category word such as "Correct:", "Incorrect:" or "Partly correct:".
+Never put a question inside the acknowledgement — the only question goes after the label.
 Then ask the next question. Do not greet again or re-introduce yourself.
 
 RESPONSE FORMAT — MANDATORY:
@@ -117,9 +117,10 @@ The acknowledgement line MUST start with "> ". Leave a blank line before "${NEXT
 `;
 }
 
-function subjectPrompt(ctx: InterviewContext, messages: Message[]): string {
+function subjectPrompt(ctx: InterviewContext, persona: Persona, messages: Message[]): string {
   return `
-You are ${INTERVIEWER_NAME}, a strict but encouraging Senior Technical Interviewer specializing in ${ctx.subject}.
+You are ${persona.name}, ${persona.role} interviewing a candidate on ${ctx.subject}.
+YOUR STYLE: ${persona.style}
 
 ${difficultyGuidelines(ctx.difficulty, ctx.subject)}
 
@@ -127,9 +128,10 @@ ${strictRules(messages)}
 `;
 }
 
-function resumePrompt(ctx: InterviewContext, messages: Message[]): string {
+function resumePrompt(ctx: InterviewContext, persona: Persona, messages: Message[]): string {
   return `
-You are ${INTERVIEWER_NAME}, a strict but encouraging Senior Technical Interviewer conducting a resume-based interview.
+You are ${persona.name}, ${persona.role} conducting a resume-based interview.
+YOUR STYLE: ${persona.style}
 
 CANDIDATE RESUME:
 """
@@ -151,6 +153,13 @@ ${strictRules(messages)}
  * If the lead-in and question share one line, the line is split at the sentence containing the "?".
  */
 function splitQuestion(raw: string): { lead: string; question: string } | null {
+  // Prefer the model's own label: it also handles imperative questions ("Explain how...") that have no "?".
+  const labelled = raw.match(/^([\s\S]*?)\*\*(?:Next |First )?Question:\*\*\s*([\s\S]+)$/i);
+  if (labelled) {
+    const lead = labelled[1].replace(/^>\s?/gm, '').split('\n').map((l) => l.trim()).filter(Boolean).join(' ');
+    return { lead, question: labelled[2].trim() };
+  }
+
   const cleaned = raw
     .replace(/\*\*(?:Next |First )?Question:\*\*/gi, '')
     .replace(/^>\s?/gm, '')
@@ -158,7 +167,13 @@ function splitQuestion(raw: string): { lead: string; question: string } | null {
 
   const lines = cleaned.split('\n').map((l) => l.trim()).filter(Boolean);
   const fromEnd = [...lines].reverse().findIndex((l) => l.includes('?'));
-  if (fromEnd === -1) return null;
+  if (fromEnd === -1) {
+    // Imperative question ("Explain how...") with no label: the last paragraph is the question.
+    const paragraphs = cleaned.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+    if (paragraphs.length < 2) return null;
+    const question = paragraphs.pop()!;
+    return { lead: paragraphs.join(' ').replace(/\s+/g, ' '), question };
+  }
 
   const qIdx = lines.length - 1 - fromEnd;
   let lead = lines.slice(0, qIdx).join(' ').trim();
@@ -196,7 +211,11 @@ function formatTurn(raw: string, kind: TurnKind, previous: string | null): strin
   }
   const isRepeat = previous !== null && normalise(previous) === normalise(parts.question);
   const label = isRepeat ? QUESTION_LABEL : NEXT_QUESTION_LABEL;
-  return parts.lead ? `> ${parts.lead}\n\n\n${label} ${parts.question}` : `${label} ${parts.question}`;
+  // The model sometimes restates the question inside its acknowledgement; it is shown below the label anyway.
+  const lead = parts.lead.includes(parts.question)
+    ? parts.lead.replace(parts.question, '').replace(/[\s:,–-]+$/, '').replace(/([^.!?])$/, '$1.')
+    : parts.lead;
+  return lead ? `> ${lead}\n\n\n${label} ${parts.question}` : `${label} ${parts.question}`;
 }
 
 /**
@@ -206,8 +225,9 @@ function formatTurn(raw: string, kind: TurnKind, previous: string | null): strin
 export async function nextInterviewerTurn(ctx: InterviewContext, conversation: Message[]): Promise<string> {
   const kind: TurnKind = conversation.some((m) => m.role === 'assistant') ? 'follow-up' : 'opening';
   const previous = previousQuestion(conversation);
-  const base = ctx.subject === RESUME_SUBJECT ? resumePrompt(ctx, conversation) : subjectPrompt(ctx, conversation);
-  const system = `${base}\n${turnInstructions(kind, ctx, previous)}`;
+  const persona = personaFor(ctx.difficulty);
+  const base = ctx.subject === RESUME_SUBJECT ? resumePrompt(ctx, persona, conversation) : subjectPrompt(ctx, persona, conversation);
+  const system = `${base}\n${turnInstructions(kind, ctx, persona, previous)}`;
 
   const raw = await complete(system, conversation, { temperature: 0.7 });
   return formatTurn(raw, kind, previous);
