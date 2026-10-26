@@ -1,5 +1,5 @@
 // app/lib/questionAnalysis.ts
-import type { Message } from './types';
+import type { EvaluationReport, Message } from './types';
 
 const STOP_WORDS = new Set([
   'what', 'is', 'are', 'the', 'a', 'an', 'in', 'of', 'to', 'do', 'does', 'how',
@@ -28,7 +28,9 @@ export function stripMarkdown(text: string): string {
 }
 
 export function extractQuestion(content: string): string {
-  const sentences = content.split(/(?<=[.?!])\s+/);
+  // Every interviewer turn carries the same "**Next Question:**" label; it must not count as shared keywords.
+  const text = content.replace(/\*\*Next Question:\*\*/gi, ' ');
+  const sentences = text.split(/(?<=[.?!])\s+/);
   const questionSentence = sentences.find((s) => s.trim().endsWith('?')) || sentences[sentences.length - 1];
   return questionSentence.toLowerCase().trim();
 }
@@ -62,4 +64,16 @@ export const MIN_QUESTIONS_TO_FINISH = 5;
 export function countAnsweredQuestions(history: Message[]): number {
   const unique = new Set(getUniqueQuestions(history.filter((m) => m.role === 'assistant')));
   return history.filter((m, i) => unique.has(m) && history[i + 1]?.role === 'user').length;
+}
+
+/** The report recorded when a candidate ends the interview before answering enough questions. */
+export function endedEarlyReport(questionsAnswered: number): EvaluationReport {
+  return {
+    score: 0,
+    summary: `Interview ended after ${questionsAnswered} of the required ${MIN_QUESTIONS_TO_FINISH} questions were answered. No evaluation was generated and the interview is marked as failed.`,
+    strengths: [],
+    improvements: [],
+    endedEarly: true,
+    questionsAnswered,
+  };
 }

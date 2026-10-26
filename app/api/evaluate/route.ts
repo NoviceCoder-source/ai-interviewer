@@ -2,10 +2,13 @@ import { NextResponse } from 'next/server';
 import { requireUser } from '../../lib/auth';
 import { getOwnedInterview, saveReport } from '../../lib/interviews';
 import { evaluateTranscript } from '../../lib/ai/evaluator';
-import { MIN_QUESTIONS_TO_FINISH, countAnsweredQuestions } from '../../lib/questionAnalysis';
+import { MIN_QUESTIONS_TO_FINISH, countAnsweredQuestions, endedEarlyReport } from '../../lib/questionAnalysis';
 import { jsonError, serverError } from '../../lib/http';
 
-/** Grades a finished interview from the stored transcript and saves the report. */
+/**
+ * Ends an interview. Grades the stored transcript if the candidate answered enough questions;
+ * otherwise records an automatic fail (0%, no AI report).
+ */
 export async function POST(req: Request) {
   const auth = await requireUser();
   if (!auth.ok) return auth.response;
@@ -19,8 +22,11 @@ export async function POST(req: Request) {
     if (interview.report) return NextResponse.json({ report: interview.report });
 
     const history = interview.chat_history ?? [];
-    if (countAnsweredQuestions(history) < MIN_QUESTIONS_TO_FINISH) {
-      return jsonError(400, `Answer at least ${MIN_QUESTIONS_TO_FINISH} questions before ending the interview.`);
+    const answered = countAnsweredQuestions(history);
+    if (answered < MIN_QUESTIONS_TO_FINISH) {
+      const report = endedEarlyReport(answered);
+      await saveReport(interview.id, report, 'failed');
+      return NextResponse.json({ report });
     }
 
     // A trailing unanswered question shouldn't count against the candidate.

@@ -14,6 +14,8 @@ import { generateInterviewPDF } from '../../../lib/pdfReport';
 import ScoreCard from '../../../components/ScoreCard';
 import StrengthsImprovements from '../../../components/StrengthsImprovements';
 import ReportActions from '../../../components/ReportActions';
+import EndInterviewDialog from '../../../components/interview/EndInterviewDialog';
+import EndedEarlyNotice from '../../../components/EndedEarlyNotice';
 
 type ActiveInterview = Pick<InterviewData, 'id' | 'subject' | 'difficulty'>;
 
@@ -29,6 +31,7 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
   const [isThinking, setIsThinking] = useState(false);
   const [isInputDisabled, setIsInputDisabled] = useState(false);
   const [error, setError] = useState('');
+  const [confirmingEnd, setConfirmingEnd] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -37,7 +40,7 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
 
   const questionsAsked = countAnsweredQuestions(chatHistory);
   const minQuestionsRequired = MIN_QUESTIONS_TO_FINISH;
-  const canEndInterview = questionsAsked >= minQuestionsRequired;
+  const hasMinimumAnswers = questionsAsked >= minQuestionsRequired;
 
   /** Sends one turn to the server; the server stores it and returns the full saved transcript. */
   const sendTurn = async (message?: string) => {
@@ -104,9 +107,9 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
     }
   };
 
+  /** Runs after the candidate typed "Submit". The server fails the interview if too few questions were answered. */
   const handleEndInterview = async () => {
-    if (!canEndInterview) return;
-
+    setConfirmingEnd(false);
     setIsInputDisabled(true);
     setIsEvaluating(true);
     setError('');
@@ -134,7 +137,7 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
     doc.save(`interview-${interview?.subject}-${interview?.difficulty}-${new Date().toISOString().slice(0, 10)}.pdf`);
   };
 
-  const scoreColors = report ? getScoreColor(report.score) : null;
+  const scoreColors = report ? getScoreColor(report.score, report.endedEarly) : null;
 
   const MarkdownContent = ({ content }: { content: string }) => (
     <ReactMarkdown
@@ -193,7 +196,7 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
           </div>
 
           <div className="flex items-center gap-3">
-            {!canEndInterview && (
+            {!hasMinimumAnswers && (
               <div className="text-right">
                 <p className="text-white/40 text-[10px] font-black uppercase tracking-widest">
                   {questionsAsked}/{minQuestionsRequired} unique questions
@@ -207,14 +210,10 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
               </div>
             )}
             <button
-              onClick={handleEndInterview}
-              disabled={!canEndInterview || isInputDisabled}
-              title={!canEndInterview ? `${minQuestionsRequired - questionsAsked} more unique questions needed` : 'End interview and get your grade'}
-              className={`px-8 py-3 rounded-full font-black uppercase text-[10px] tracking-widest transition-all shadow-xl ${
-                canEndInterview && !isInputDisabled
-                  ? 'bg-white text-black hover:bg-red-500 hover:text-white cursor-pointer'
-                  : 'bg-white/10 text-white/30 cursor-not-allowed'
-              }`}
+              onClick={() => setConfirmingEnd(true)}
+              disabled={isInputDisabled}
+              title={hasMinimumAnswers ? 'End interview and get your grade' : `Ending before ${minQuestionsRequired} answered questions fails the interview`}
+              className="px-8 py-3 rounded-full font-black uppercase text-[10px] tracking-widest transition-all shadow-xl bg-white text-black hover:bg-red-500 hover:text-white cursor-pointer disabled:bg-white/10 disabled:text-white/30 disabled:cursor-not-allowed"
             >
               End & Grade
             </button>
@@ -278,14 +277,27 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
         </main>
       </div>
 
+      {confirmingEnd && (
+        <EndInterviewDialog
+          questionsAnswered={questionsAsked}
+          minQuestions={minQuestionsRequired}
+          onConfirm={handleEndInterview}
+          onCancel={() => setConfirmingEnd(false)}
+        />
+      )}
+
       {(isEvaluating || report) && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-3xl z-[100] flex items-start justify-center p-4 overflow-y-auto pt-8 pb-20">
           <div className="max-w-3xl w-full my-auto">
             {isEvaluating ? (
               <div className="bg-white rounded-[3rem] p-16 text-center shadow-2xl">
                 <div className="w-16 h-16 border-t-4 border-indigo-600 border-solid rounded-full animate-spin mx-auto mb-8" />
-                <h2 className="text-2xl font-black uppercase tracking-widest text-gray-900 mb-2">Analyzing Interview</h2>
-                <p className="text-gray-400 text-sm font-medium">Generating your detailed performance report...</p>
+                <h2 className="text-2xl font-black uppercase tracking-widest text-gray-900 mb-2">
+                  {hasMinimumAnswers ? 'Analyzing Interview' : 'Ending Interview'}
+                </h2>
+                <p className="text-gray-400 text-sm font-medium">
+                  {hasMinimumAnswers ? 'Generating your detailed performance report...' : 'Recording your result...'}
+                </p>
               </div>
             ) : report && scoreColors && (
               <div className="space-y-4 animate-in fade-in duration-500">
@@ -296,15 +308,21 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
                   score={report.score}
                   scoreColors={scoreColors}
                 />
-                <div className="bg-white rounded-[2.5rem] p-8 shadow-xl">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-8 h-8 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600 font-black text-sm">📋</div>
-                    <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-500">Interviewer&apos;s Assessment</h3>
-                  </div>
-                  <p className="text-gray-700 leading-relaxed text-base font-medium border-l-4 border-indigo-200 pl-4 italic">{report.summary}</p>
-                </div>
+                {report.endedEarly ? (
+                  <EndedEarlyNotice summary={report.summary} />
+                ) : (
+                  <>
+                    <div className="bg-white rounded-[2.5rem] p-8 shadow-xl">
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="w-8 h-8 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600 font-black text-sm">📋</div>
+                        <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-500">Interviewer&apos;s Assessment</h3>
+                      </div>
+                      <p className="text-gray-700 leading-relaxed text-base font-medium border-l-4 border-indigo-200 pl-4 italic">{report.summary}</p>
+                    </div>
 
-                <StrengthsImprovements strengths={report.strengths} improvements={report.improvements} />
+                    <StrengthsImprovements strengths={report.strengths} improvements={report.improvements} />
+                  </>
+                )}
 
                 <div className="grid grid-cols-3 gap-4">
                   <div className="bg-white rounded-[2rem] p-6 shadow-xl text-center">

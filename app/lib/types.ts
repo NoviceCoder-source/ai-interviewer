@@ -10,6 +10,9 @@ export interface EvaluationReport {
   summary: string;
   strengths: string[];
   improvements: string[];
+  /** Set when the candidate ended before answering the minimum number of questions (automatic fail, no AI report). */
+  endedEarly?: boolean;
+  questionsAnswered?: number;
 }
 
 export interface InterviewSummary {

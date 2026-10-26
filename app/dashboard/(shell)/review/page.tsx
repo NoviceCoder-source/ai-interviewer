@@ -176,6 +176,9 @@ function SessionCard({ session, onViewReport, secondaryText, secondaryTint }: {
           <div>
             <p className="text-[10px] font-medium text-[#7b94b0]">Final Grade</p>
             <p className="mt-0.5 text-lg font-bold leading-none" style={secondaryText}>{session.report.score}%</p>
+            {session.report.endedEarly && (
+              <p className="mt-1 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-600">Failed · ended early</p>
+            )}
           </div>
         </div>
 

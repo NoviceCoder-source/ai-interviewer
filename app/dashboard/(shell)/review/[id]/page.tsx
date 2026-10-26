@@ -3,13 +3,14 @@ import { useEffect, useState, use } from 'react';
 import { supabase } from '../../../../lib/supabase/browser';
 import { useRouter } from 'next/navigation';
 import { generateInterviewPDF } from '../../../../lib/pdfReport';
-import { stripMarkdown } from '../../../../lib/questionAnalysis';
+import { getUniqueQuestions, stripMarkdown } from '../../../../lib/questionAnalysis';
 import { getScoreTheme } from '../../../../lib/scoreColors';
 import { useSiteSettings } from '../../../../lib/SiteSettingsContext';
 import { ArrowLeft, CalendarDays, Download, CheckCircle2, Target, Bot, User } from 'lucide-react';
 import { secondaryText, secondaryTint } from '../../../../lib/theme';
 import type { InterviewData } from '../../../../lib/types';
 import LoadingState from '../../../../components/LoadingState';
+import EndedEarlyNotice from '../../../../components/EndedEarlyNotice';
 
 export default function ReviewReportPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -61,40 +62,9 @@ export default function ReviewReportPage({ params }: { params: Promise<{ id: str
   if (!interview) return null;
 
   const report = interview.report;
-  const meta = getScoreTheme(report.score);
+  const meta = getScoreTheme(report.score, report.endedEarly);
   const userResponses = interview.chat_history?.filter((m) => m.role === 'user').length ?? 0;
-  const assistantMessages = interview.chat_history?.filter((m) => m.role === 'assistant') ?? [];
-
-  const STOP_WORDS = new Set([
-    'what', 'is', 'are', 'the', 'a', 'an', 'in', 'of', 'to', 'do', 'does', 'how',
-    'why', 'when', 'where', 'which', 'can', 'you', 'your', 'it', 'its', 'this',
-    'that', 'and', 'or', 'for', 'with', 'about', 'between', 'explain', 'describe',
-    'define', 'tell', 'me', 'difference', 'use', 'used', 'give', 'example', 'write',
-    'simple', 'basic', 'python', 'sql', 'data', 'machine', 'learning', 'analytics',
-  ]);
-
-  const extractQuestion = (content: string): string => {
-    const sentences = content.split(/(?<=[.?!])\s+/);
-    const questionSentence = sentences.find((s) => s.trim().endsWith('?')) || sentences[sentences.length - 1];
-    return questionSentence.toLowerCase().trim();
-  };
-
-  const getKeywords = (text: string): Set<string> => new Set(
-    text.replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter((w) => w.length > 2 && !STOP_WORDS.has(w))
-  );
-
-  const uniqueQuestions = assistantMessages.filter((msg, index) => {
-    if (index === 0) return true;
-    const currentKeywords = getKeywords(extractQuestion(msg.content));
-    if (currentKeywords.size === 0) return true;
-    const isDuplicate = assistantMessages.slice(0, index).some((prevMsg) => {
-      const prevKeywords = getKeywords(extractQuestion(prevMsg.content));
-      if (prevKeywords.size === 0) return false;
-      const overlap = [...currentKeywords].filter((w) => prevKeywords.has(w)).length;
-      return overlap / Math.max(currentKeywords.size, prevKeywords.size) >= 0.75;
-    });
-    return !isDuplicate;
-  });
+  const uniqueQuestions = getUniqueQuestions(interview.chat_history?.filter((m) => m.role === 'assistant') ?? []);
 
   const subjectEmoji = interview.subject === 'Python' ? '🐍' : interview.subject === 'SQL' ? '🗄️' : '💻';
 
@@ -167,11 +137,17 @@ export default function ReviewReportPage({ params }: { params: Promise<{ id: str
           </div>
         </section>
 
-        {/* STRENGTHS + IMPROVEMENTS */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-          <InsightBox title="Key Strengths" icon={<CheckCircle2 size={17} />} items={report.strengths} type="success" />
-          <InsightBox title="Areas for Growth" icon={<Target size={17} />} items={report.improvements} type="warning" />
-        </div>
+        {/* STRENGTHS + IMPROVEMENTS (none for an interview that was ended early) */}
+        {report.endedEarly ? (
+          <div className="mb-4">
+            <EndedEarlyNotice summary={report.summary} />
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+            <InsightBox title="Key Strengths" icon={<CheckCircle2 size={17} />} items={report.strengths} type="success" />
+            <InsightBox title="Areas for Growth" icon={<Target size={17} />} items={report.improvements} type="warning" />
+          </div>
+        )}
 
         {/* STATS */}
         <div className="grid grid-cols-3 gap-4 mb-4">

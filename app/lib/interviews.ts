@@ -27,11 +27,11 @@ export async function saveChatHistory(id: string, history: Message[]) {
   if (error) throw error;
 }
 
-export async function saveReport(id: string, report: EvaluationReport) {
+export async function saveReport(id: string, report: EvaluationReport, status: 'completed' | 'failed' = 'completed') {
   const { error } = await supabaseAdmin.from('interviews').update({ report }).eq('id', id);
   if (error) throw error;
 
   // Status is informational only; never let it block saving the report.
-  const { error: statusError } = await supabaseAdmin.from('interviews').update({ status: 'completed' }).eq('id', id);
+  const { error: statusError } = await supabaseAdmin.from('interviews').update({ status }).eq('id', id);
   if (statusError) console.error('saveReport: could not set status', statusError.message);
 }

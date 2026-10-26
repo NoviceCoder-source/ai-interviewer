@@ -10,6 +10,7 @@ import { generateInterviewPDF } from '../../../lib/pdfReport';
 import ScoreCard from '../../../components/ScoreCard';
 import StrengthsImprovements from '../../../components/StrengthsImprovements';
 import ReportActions from '../../../components/ReportActions';
+import EndedEarlyNotice from '../../../components/EndedEarlyNotice';
 
 export default function AdminReviewReportPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -61,7 +62,7 @@ export default function AdminReviewReportPage({ params }: { params: Promise<{ id
   if (!interview) return null;
 
   const report = interview.report;
-  const scoreColors = getScoreColor(report.score);
+  const scoreColors = getScoreColor(report.score, report.endedEarly);
   const userResponses = interview.chat_history?.filter(m => m.role === 'user').length ?? 0;
   const assistantMessages = interview.chat_history?.filter(m => m.role === 'assistant') ?? [];
 
@@ -87,17 +88,23 @@ export default function AdminReviewReportPage({ params }: { params: Promise<{ id
           studentLine={`${interview.profiles?.full_name || 'Unknown Student'} · ${interview.profiles?.email}`}
         />
 
-        <div className="bg-white rounded-[2.5rem] p-8 shadow-xl">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-8 h-8 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600 font-black text-sm">📋</div>
-            <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-500">Interviewer&apos;s Assessment</h3>
-          </div>
-          <p className="text-gray-700 leading-relaxed text-base font-medium border-l-4 border-indigo-200 pl-4 italic">
-            {report.summary}
-          </p>
-        </div>
+        {report.endedEarly ? (
+          <EndedEarlyNotice summary={report.summary} />
+        ) : (
+          <>
+            <div className="bg-white rounded-[2.5rem] p-8 shadow-xl">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-8 h-8 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600 font-black text-sm">📋</div>
+                <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-500">Interviewer&apos;s Assessment</h3>
+              </div>
+              <p className="text-gray-700 leading-relaxed text-base font-medium border-l-4 border-indigo-200 pl-4 italic">
+                {report.summary}
+              </p>
+            </div>
 
-        <StrengthsImprovements strengths={report.strengths} improvements={report.improvements} />
+            <StrengthsImprovements strengths={report.strengths} improvements={report.improvements} />
+          </>
+        )}
 
         <div className="grid grid-cols-3 gap-4">
           <div className="bg-white rounded-[2rem] p-6 shadow-xl text-center">

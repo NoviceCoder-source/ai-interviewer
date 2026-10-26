@@ -109,6 +109,11 @@ export default function AdminReportsPage() {
                       {s.report.score}%
                     </span>
                     <span className="text-[9px] font-black text-gray-400 uppercase tracking-[0.2em]">Final Grade</span>
+                    {s.report.endedEarly && (
+                      <span className="mt-1 block rounded-full bg-red-100 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-red-600">
+                        Failed · ended early
+                      </span>
+                    )}
                   </div>
 
                   <button

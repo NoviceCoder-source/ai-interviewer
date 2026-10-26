@@ -6,6 +6,9 @@ type Band = 'excellent' | 'good' | 'average' | 'low';
 const bandOf = (score: number): Band =>
   score >= 80 ? 'excellent' : score >= 60 ? 'good' : score >= 40 ? 'average' : 'low';
 
+/** Interviews ended before the minimum are shown as an outright fail rather than a low score. */
+const labelOf = (band: Band, endedEarly: boolean) => (endedEarly ? 'Failed' : LABELS[band]);
+
 const LABELS: Record<Band, string> = {
   excellent: 'Excellent',
   good: 'Good',
@@ -20,7 +23,7 @@ export interface ScoreColors {
 }
 
 /** Tailwind classes, used by the dark interview / admin report cards. */
-export function getScoreColor(score: number): ScoreColors {
+export function getScoreColor(score: number, endedEarly = false): ScoreColors {
   const band = bandOf(score);
   const classes: Record<Band, Omit<ScoreColors, 'label'>> = {
     excellent: { text: 'text-emerald-600', bg: 'bg-emerald-500' },
@@ -28,7 +31,7 @@ export function getScoreColor(score: number): ScoreColors {
     average: { text: 'text-amber-600', bg: 'bg-amber-500' },
     low: { text: 'text-red-600', bg: 'bg-red-500' },
   };
-  return { ...classes[band], label: LABELS[band] };
+  return { ...classes[band], label: labelOf(band, endedEarly) };
 }
 
 export interface ScoreTheme {
@@ -39,7 +42,7 @@ export interface ScoreTheme {
 }
 
 /** Inline CSS colors, used by the student dashboard report (follows the white-label secondary color). */
-export function getScoreTheme(score: number): ScoreTheme {
+export function getScoreTheme(score: number, endedEarly = false): ScoreTheme {
   const band = bandOf(score);
   const colors: Record<Band, Omit<ScoreTheme, 'label'>> = {
     excellent: { color: '#16A36D', bg: '#F4FFFB', border: '#CCEFE2' },
@@ -51,5 +54,5 @@ export function getScoreTheme(score: number): ScoreTheme {
     average: { color: '#D97706', bg: '#FFFBEB', border: '#FDE68A' },
     low: { color: '#EF3948', bg: '#FFF7F8', border: '#FFD9DD' },
   };
-  return { ...colors[band], label: LABELS[band] };
+  return { ...colors[band], label: labelOf(band, endedEarly) };
 }
