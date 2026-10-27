@@ -11,24 +11,24 @@ export default function Dashboard() {
   const studentName = useStudentName();
 
   return (
-    <div className="flex-1 overflow-y-auto px-8 py-6">
-      <div className="mx-auto max-w-[1300px] h-full flex flex-col">
+    <div className="flex-1 overflow-y-auto px-8 py-4">
+      <div className="mx-auto max-w-[1300px] min-h-full flex flex-col">
 
-        <section className="relative mb-6 overflow-hidden rounded-2xl bg-gradient-to-r from-[#eef7ff] to-white px-8 py-6 shrink-0">
-          <p className="mb-1 text-xs font-semibold uppercase tracking-[2px]" style={secondaryText}>Welcome Back,</p>
-          <h1 className="text-3xl font-bold leading-tight tracking-tight text-[#10254a]">
-            {studentName} <span className="ml-2 text-2xl">👋</span>
+        <section className="relative mb-4 overflow-hidden rounded-2xl bg-gradient-to-r from-[#eef7ff] to-white px-6 py-4 shrink-0">
+          <p className="text-[11px] font-semibold uppercase tracking-[2px]" style={secondaryText}>Welcome Back,</p>
+          <h1 className="text-2xl font-bold leading-tight tracking-tight text-[#10254a]">
+            {studentName} <span className="ml-1.5 text-xl">👋</span>
           </h1>
-          <p className="mt-2 max-w-[600px] text-sm leading-6 text-[#607a9f]">
+          <p className="mt-1 max-w-[600px] text-sm text-[#607a9f]">
             Your AI-powered interview coach is here to help you practice, improve and get hired.
           </p>
         </section>
 
-        <section className="grid gap-5 lg:grid-cols-2 flex-1 min-h-0">
+        <section className="grid gap-4 lg:grid-cols-2 flex-1">
           <DashboardCard
             icon={
-              <div className="flex h-14 w-14 items-center justify-center rounded-full text-white shadow-lg shadow-blue-200" style={secondaryBg}>
-                <Mic size={26} strokeWidth={2} />
+              <div className="flex h-12 w-12 items-center justify-center rounded-full text-white shadow-lg shadow-blue-200" style={secondaryBg}>
+                <Mic size={22} strokeWidth={2} />
               </div>
             }
             badge="Start Fresh"
@@ -46,8 +46,8 @@ export default function Dashboard() {
           />
           <DashboardCard
             icon={
-              <div className="flex h-14 w-14 items-center justify-center rounded-full" style={{ ...secondaryTint(12), ...secondaryText }}>
-                <FileText size={26} strokeWidth={1.8} />
+              <div className="flex h-12 w-12 items-center justify-center rounded-full" style={{ ...secondaryTint(12), ...secondaryText }}>
+                <FileText size={22} strokeWidth={1.8} />
               </div>
             }
             badge="Track Progress"
@@ -64,7 +64,7 @@ export default function Dashboard() {
           />
         </section>
 
-        <footer className="mt-5 flex flex-col items-center justify-between gap-2 border-t border-[#e2eaf4] pt-4 text-xs text-[#8aa0be] sm:flex-row shrink-0">
+        <footer className="mt-4 flex flex-col items-center justify-between gap-2 border-t border-[#e2eaf4] pt-3 text-xs text-[#8aa0be] sm:flex-row shrink-0">
           <p>V2.0 &nbsp;//&nbsp; {settings.org_name.toUpperCase()} AI INTERVIEWER</p>
           <div className="flex items-center gap-2">
             <ShieldCheck size={14} className="text-[#80a5d0]" />
@@ -87,16 +87,24 @@ function DashboardCard({
   onClick: () => void; primary?: boolean;
 }) {
   return (
-    <div className={`group relative overflow-hidden rounded-2xl border p-6 flex flex-col transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl ${
+    <button
+      type="button"
+      onClick={onClick}
+      className={`group relative overflow-hidden rounded-2xl border p-5 flex flex-col text-left cursor-pointer transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl ${
       primary ? 'border-[#d4e7fb] bg-gradient-to-br from-white via-white to-[#e9f5ff]' : 'border-[#e0e8f2] bg-white'
-    }`}>
-      {primary && <div className="absolute -bottom-20 -right-16 h-56 w-56 rounded-full bg-[#d9ecff]/60 blur-sm" />}
+    }`}
+    >
+      {primary &&<div className="absolute -bottom-20 -right-16 h-56 w-56 rounded-full bg-[#d9ecff]/60 blur-sm" />}
       <div className="relative z-10 flex flex-col flex-1">
-        <div className="mb-4">{icon}</div>
-        <span className="inline-flex w-fit rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ ...badgeStyle, ...badgeTextStyle }}>{badge}</span>
-        <h2 className="mt-3 text-2xl font-bold tracking-tight text-[#10254a]">{title}</h2>
-        <p className="mt-2 max-w-[480px] text-sm leading-6 text-[#607a9f]">{description}</p>
-        <div className="mt-4 space-y-2.5">
+        <div className="flex items-center gap-3.5">
+          {icon}
+          <div>
+            <span className="inline-flex w-fit rounded-full px-2.5 py-0.5 text-[11px] font-semibold" style={{ ...badgeStyle, ...badgeTextStyle }}>{badge}</span>
+            <h2 className="mt-1 text-xl font-bold tracking-tight text-[#10254a]">{title}</h2>
+          </div>
+        </div>
+        <p className="mt-3 max-w-[480px] text-sm leading-5 text-[#607a9f]">{description}</p>
+        <div className="mt-3 mb-4 space-y-1.5">
           {features.map((feature, i) => (
             <div key={i} className="flex items-center gap-2.5 text-[13px] text-[#587292]">
               <span className="flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full" style={checkStyle}>
@@ -106,17 +114,16 @@ function DashboardCard({
             </div>
           ))}
         </div>
-        <button
-          onClick={onClick}
+        <span
           style={primary ? buttonStyle : outlineStyle}
-          className={`mt-5 flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold transition-all w-fit ${
-            primary ? 'text-white shadow-lg shadow-blue-200 hover:opacity-90' : 'border-2 bg-white hover:bg-[#edf6ff]'
+          className={`mt-auto flex items-center gap-2 rounded-full px-5 py-2 text-sm font-semibold transition-all w-fit ${
+            primary ? 'text-white shadow-lg shadow-blue-200 group-hover:opacity-90' : 'border-2 bg-white group-hover:bg-[#edf6ff]'
           }`}
         >
           {buttonText}
           <ArrowRight size={16} />
-        </button>
+        </span>
       </div>
-    </div>
+    </button>
   );
 }
