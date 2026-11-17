@@ -1,0 +1,75 @@
+﻿subject,topic,difficulty,question,option_a,option_b,option_c,option_d,correct_answer,explanation
+Python,Data Types,basic,Which of these data types is mutable in Python?,tuple,list,str,frozenset,B,"Lists can be changed after they are created; tuples, strings and frozensets cannot."
+Python,Data Types,basic,What is the output of type(3.0)?,<class 'int'>,<class 'float'>,<class 'decimal'>,<class 'double'>,B,3.0 is a floating-point literal.
+Python,Data Types,basic,"What does len(""hello"") return?",4,5,6,An error,B,The string has five characters.
+Python,Data Types,basic,What is the result of 7 // 2?,3.5,3,4,3.0,B,// is floor division; with two integers it returns an integer.
+Python,Data Types,basic,What is the result of 7 % 3?,1,2,0,2.33,A,% returns the remainder: 7 = 2 × 3 + 1.
+Python,Data Types,basic,What is the result of 2 ** 3?,6,8,9,5,B,** is exponentiation: 2 to the power 3 is 8.
+Python,Data Types,basic,Which value is a valid boolean literal in Python?,true,TRUE,True,"""True""",C,Python booleans are True and False with a capital first letter.
+Python,Data Types,basic,"What does int(""42"") return?","""42""",42,42.0,An error,B,int() converts a numeric string to an integer.
+Python,Data Types,basic,"What is the output of ""Py"" + ""thon""?",Py thon,Python,PyPython,An error,B,+ concatenates strings.
+Python,Data Types,basic,"What is the output of ""ab"" * 3?",ababab,ab3,aaabbb,An error,A,Multiplying a string by an integer repeats it.
+Python,Control Flow,basic,Which keyword starts a conditional block in Python?,when,if,case,check,B,
+Python,Control Flow,basic,How many times does this loop run?  for i in range(5): pass,4,5,6,It runs forever,B,"range(5) produces 0, 1, 2, 3, 4."
+Python,Control Flow,basic,Which keyword exits a loop immediately?,exit,stop,break,return,C,
+Python,Control Flow,basic,Which keyword skips to the next iteration of a loop?,skip,continue,next,pass,B,
+Python,Control Flow,basic,"What does list(range(2, 6)) produce?","[2, 3, 4, 5]","[2, 3, 4, 5, 6]","[3, 4, 5, 6]","[2, 6]",A,The stop value 6 is excluded.
+Python,Control Flow,basic,What does the pass statement do?,Ends the program,Skips the rest of the loop,Nothing; it is a placeholder,Raises an error,C,
+Python,Control Flow,basic,"Which keyword is used for ""else if"" in Python?",elseif,else if,elif,elsif,C,
+Python,Functions,basic,Which keyword defines a function in Python?,func,def,function,define,B,
+Python,Functions,basic,What does a function return if it has no return statement?,0,An empty string,None,False,C,
+Python,Functions,basic,Which built-in function prints output to the screen?,echo(),print(),write(),display(),B,
+Python,Functions,basic,Which built-in function reads a line of text typed by the user?,read(),scan(),input(),get(),C,input() always returns a string.
+Python,Functions,basic,"Given def greet(name=""World""): return ""Hi "" + name, what does greet() return?",Hi,Hi World,An error,None,B,The default argument is used when no value is passed.
+Python,Functions,basic,"What does max([3, 9, 2]) return?",3,9,2,[9],B,
+Python,Data Structures,basic,How do you get the first element of the list nums?,nums[1],nums[0],nums.first(),nums[-0],B,Python indexing starts at 0.
+Python,Data Structures,basic,Which method adds an item to the end of a list?,add(),push(),append(),insert_end(),C,
+Python,Data Structures,basic,How do you create an empty dictionary?,[],{},(),set(),B,{} creates an empty dict; set() creates an empty set.
+Python,Data Structures,basic,"What does nums[-1] return for nums = [10, 20, 30]?",10,20,30,An error,C,Negative indexes count from the end.
+Python,Data Structures,basic,Which collection type stores only unique values?,list,tuple,set,str,C,
+Python,Data Structures,basic,"Given d = {""a"": 1}, what does d[""a""] return?","""a""",1,"{""a"": 1}",None,B,
+Python,Data Structures,basic,"What does [1, 2, 3][1:] return?",[1],"[2, 3]","[1, 2]",[3],B,Slicing from index 1 to the end.
+Python,Data Structures,basic,Which of these creates a tuple?,"[1, 2]","{1, 2}","(1, 2)","<1, 2>",C,
+Python,Exceptions & Files,basic,Which keyword is used to catch an exception?,catch,except,handle,rescue,B,
+Python,Exceptions & Files,basic,What error does 10 / 0 raise?,ValueError,ZeroDivisionError,ArithmeticWarning,TypeError,B,
+Python,Exceptions & Files,basic,Which mode opens a file for reading?,"""w""","""r""","""a""","""x""",B,
+Python,Exceptions & Files,basic,"What error does int(""abc"") raise?",TypeError,ValueError,NameError,SyntaxError,B,The type is right (a string) but the value cannot be converted.
+Python,Exceptions & Files,basic,"Which block always runs, whether or not an exception occurs?",else,finally,except,always,B,
+Python,Data Types,intermediate,What is the output of print(0.1 + 0.2 == 0.3)?,True,False,An error,None,B,Floating-point rounding makes 0.1 + 0.2 equal 0.30000000000000004.
+Python,Data Types,intermediate,"What does ""a,b,c"".split("","") return?","""abc""","['a', 'b', 'c']","('a', 'b', 'c')","['a,b,c']",B,
+Python,Data Types,intermediate,"What does "", "".join([""x"", ""y""]) return?","""x, y""","""xy""","['x', 'y']","""x,y""",A,
+Python,Data Types,intermediate,"Given a = [1, 2]; b = a; b.append(3), what is a?","[1, 2]","[1, 2, 3]",[3],An error,B,a and b refer to the same list object.
+Python,Control Flow,intermediate,When does the else block of a for loop run?,Always,Only if the loop body never ran,Only if the loop ended without hitting break,Only if an exception occurred,C,
+Python,Control Flow,intermediate,What does [x * 2 for x in range(3)] produce?,"[0, 2, 4]","[2, 4, 6]","[0, 1, 2]","[0, 2, 4, 6]",A,
+Python,Control Flow,intermediate,"What does list(enumerate([""a"", ""b""])) return?","[('a', 0), ('b', 1)]","[(0, 'a'), (1, 'b')]","[0, 1]","{0: 'a', 1: 'b'}",B,
+Python,Control Flow,intermediate,"What does list(zip([1, 2, 3], [""a"", ""b""])) return?","[(1, 'a'), (2, 'b'), (3, None)]","[(1, 'a'), (2, 'b')]",An error,"[1, 'a', 2, 'b']",B,zip stops at the shortest input.
+Python,Functions,intermediate,"Inside a function, what is *args?",A dictionary of keyword arguments,A tuple of extra positional arguments,A list of all arguments,A pointer to the arguments,B,
+Python,Functions,intermediate,"Inside a function, what is **kwargs?",A tuple of positional arguments,A dictionary of extra keyword arguments,A set of argument names,A list of default values,B,
+Python,Functions,intermediate,What does (lambda x: x + 1)(4) return?,4,5,A function,An error,B,
+Python,Functions,intermediate,"What does sorted([3, 1, 2], reverse=True) return?","[1, 2, 3]","[3, 2, 1]",None,"[3, 1, 2]",B,
+Python,Functions,intermediate,"What does list(map(str.upper, [""a"", ""b""])) return?","['a', 'b']","['A', 'B']",'AB',An error,B,
+Python,Data Structures,intermediate,"What does {""a"": 1}.get(""b"", 0) return?",None,0,A KeyError,1,B,get returns the default when the key is missing.
+Python,Data Structures,intermediate,"What does {1, 2, 3} & {2, 3, 4} return?","{1, 2, 3, 4}","{2, 3}","{1, 4}",An error,B,& is set intersection.
+Python,Data Structures,intermediate,"What does {k: v * 2 for k, v in {""a"": 1}.items()} produce?",{'a': 1},{'a': 2},{'aa': 2},"[('a', 2)]",B,
+Python,Data Structures,intermediate,"What does [1, 2, 3, 4, 5][::2] return?","[1, 3, 5]","[2, 4]","[1, 2]","[5, 3, 1]",A,A step of 2 takes every second element.
+Python,OOP,intermediate,What is the purpose of the __init__ method in a class?,To delete an object,To initialise a new object,To compare two objects,To import the class,B,
+Python,OOP,intermediate,What does self refer to inside an instance method?,The class itself,The current instance,The parent class,The module,B,
+Python,OOP,intermediate,How does class Dog inherit from class Animal?,class Dog extends Animal:,class Dog(Animal):,class Dog inherits Animal:,class Dog: Animal,B,
+Python,Exceptions & Files,intermediate,"Why is ""with open(path) as f:"" preferred over calling open() alone?",It reads the file faster,"It closes the file automatically, even after an error",It locks the file for other programs,It creates the file if it is missing,B,
+Python,Exceptions & Files,intermediate,Which statement raises an exception on purpose?,throw ValueError(),raise ValueError(),error ValueError(),except ValueError(),B,
+Python,Functions,advanced,"def f(x, items=[]): items.append(x); return items. What does f(2) return after f(1) has already been called?",[2],"[1, 2]",[],An error,B,"The default list is created once, when the function is defined, and shared between calls."
+Python,Functions,advanced,What is a closure in Python?,A function that has finished running,An inner function that remembers variables from its enclosing scope,A class with no methods,A function that closes open files,B,
+Python,Functions,advanced,Which keyword lets a nested function reassign a variable from its enclosing function?,global,nonlocal,outer,static,B,
+Python,Functions,advanced,What does a function decorator do?,Changes the function name only,Wraps a function to extend its behaviour without changing its code,Makes a function run faster,Converts a function into a class,B,
+Python,Functions,advanced,What does a function containing yield return when called?,A list,A generator object,None,The first yielded value,B,"Generators produce values lazily, one at a time."
+Python,OOP,advanced,What is the main difference between @staticmethod and @classmethod?,There is no difference,A classmethod receives the class as its first argument; a staticmethod receives nothing implicitly,A staticmethod receives the instance,A classmethod cannot be called on an instance,B,
+Python,OOP,advanced,What does the Method Resolution Order (MRO) determine?,The order in which modules are imported,The order in which base classes are searched for an attribute,The order of methods in the source file,The order in which objects are garbage collected,B,
+Python,OOP,advanced,Which dunder method makes objects work with the == operator?,__cmp__,__eq__,__equals__,__same__,B,
+Python,OOP,advanced,What does defining __slots__ in a class do?,Makes the class abstract,Restricts instance attributes and saves memory by not creating a per-instance __dict__,Makes all attributes private,Allows multiple inheritance,B,
+Python,OOP,advanced,What does the @property decorator do?,Makes an attribute read-only at class level,Lets a method be accessed like an attribute,Creates a static variable,Caches the method result forever,B,
+Python,Data Types,advanced,"For small integers in CPython, why can ""a is b"" be True when a = 256 and b = 256?",is compares values,"CPython caches small integer objects, so both names point to the same object",Integers are always singletons,It is always False,B,"is checks identity, not equality; small-int caching is a CPython implementation detail."
+Python,Data Types,advanced,What does copy.deepcopy do differently from copy.copy?,Nothing,It also copies the nested objects instead of sharing them,It only copies immutable objects,It copies to disk,B,
+Python,Data Structures,advanced,What is the average time complexity of looking up a key in a dict?,O(n),O(log n),O(1),O(n log n),C,Dicts are hash tables.
+Python,Data Structures,advanced,Which data structure from collections gives O(1) appends and pops at both ends?,list,deque,OrderedDict,Counter,B,
+Python,Exceptions & Files,advanced,Which two methods must a class define to be used as a context manager in a with statement?,__open__ and __close__,__enter__ and __exit__,__start__ and __stop__,__init__ and __del__,B,
+Python,Control Flow,advanced,Why does the Global Interpreter Lock (GIL) limit CPU-bound threads in CPython?,Threads cannot share memory,Only one thread executes Python bytecode at a time,Threads always run on separate machines,The GIL disables threading completely,B,"For CPU-bound work, multiprocessing is usually used instead."

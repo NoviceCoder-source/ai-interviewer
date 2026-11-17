@@ -2,7 +2,10 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 
 const STUDENT_PATHS = ['/dashboard'];
-const ADMIN_PATHS = ['/admin/dashboard', '/admin/reports', '/admin/settings'];
+const ADMIN_PATHS = [
+  '/admin/dashboard', '/admin/reports', '/admin/settings',
+  '/admin/question-bank', '/admin/test-settings', '/admin/levels', '/admin/test-reports',
+];
 const AUTH_ONLY_PATHS = ['/pending', '/rejected'];
 
 export async function proxy(request: NextRequest) {
@@ -74,6 +77,10 @@ export const config = {
     '/admin/dashboard/:path*',
     '/admin/reports/:path*',
     '/admin/settings/:path*',
+    '/admin/question-bank/:path*',
+    '/admin/test-settings/:path*',
+    '/admin/levels/:path*',
+    '/admin/test-reports/:path*',
     '/pending',
     '/rejected',
   ],

@@ -7,6 +7,7 @@ const toStringList = (value: unknown): string[] =>
 /** Grades a transcript. Throws if the model returns nothing usable. */
 export async function evaluateTranscript(subject: string, history: Message[]): Promise<EvaluationReport> {
   const system = `You are a technical recruiter. Analyze the transcript for a ${subject} role.
+Write the summary, strengths and improvements in clear, professional English only — never Hinglish or any other language.
 You MUST return a JSON object with EXACTLY these keys:
 {
   "score": <number 0-100>,

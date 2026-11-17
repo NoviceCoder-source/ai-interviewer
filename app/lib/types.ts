@@ -49,4 +49,5 @@ export interface Student {
   contact: string;
   status: 'pending' | 'approved' | 'rejected';
   updated_at: string;
+  credits?: number;
 }

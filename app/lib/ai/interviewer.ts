@@ -72,6 +72,9 @@ STRICT RULES — NEVER BREAK THESE:
 8. STRICTLY FOLLOW THE DIFFICULTY LEVEL — non-negotiable.
 
 9. NEVER ask a question outside the assigned subject.
+
+10. ENGLISH ONLY: write every reply in clear, professional English. Never use Hinglish, Hindi or any
+    other language or mixed-language phrasing, even if the candidate writes that way.
 `;
 }
 

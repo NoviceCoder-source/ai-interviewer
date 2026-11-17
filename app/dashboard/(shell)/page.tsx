@@ -2,7 +2,8 @@
 import { useRouter } from 'next/navigation';
 import { useStudentName } from '../../components/dashboard/DashboardShell';
 import { useSiteSettings } from '../../lib/SiteSettingsContext';
-import { Mic, ArrowRight, Check, ShieldCheck, FileText } from 'lucide-react';
+import { Mic, ArrowRight, Check, ShieldCheck, FileText, ClipboardList } from 'lucide-react';
+import ProgressStrip from '../../components/dashboard/ProgressStrip';
 import { secondaryBg, secondaryText, secondaryTint } from '../../lib/theme';
 
 export default function Dashboard() {
@@ -24,7 +25,9 @@ export default function Dashboard() {
           </p>
         </section>
 
-        <section className="grid gap-4 lg:grid-cols-2 flex-1">
+        <ProgressStrip />
+
+        <section className="grid gap-4 lg:grid-cols-3 flex-1">
           <DashboardCard
             icon={
               <div className="flex h-12 w-12 items-center justify-center rounded-full text-white shadow-lg shadow-blue-200" style={secondaryBg}>
@@ -43,6 +46,24 @@ export default function Dashboard() {
             buttonStyle={secondaryBg}
             onClick={() => router.push('/dashboard/setup')}
             primary
+          />
+          <DashboardCard
+            icon={
+              <div className="flex h-12 w-12 items-center justify-center rounded-full" style={{ ...secondaryTint(12), ...secondaryText }}>
+                <ClipboardList size={22} strokeWidth={1.8} />
+              </div>
+            }
+            badge="Test Yourself"
+            badgeStyle={secondaryTint(12)}
+            badgeTextStyle={secondaryText}
+            title="MCQ Test"
+            description="Take a timed multiple-choice test out of 50 marks, by subject, topic and level."
+            features={['Questions from your institute question bank', 'Instant, rule-based scoring', 'Level-wise and topic-wise report']}
+            checkStyle={secondaryTint(15)}
+            checkIconStyle={secondaryText}
+            buttonText="Take a Test"
+            outlineStyle={{ borderColor: 'var(--color-secondary)', ...secondaryText }}
+            onClick={() => router.push('/dashboard/tests')}
           />
           <DashboardCard
             icon={
