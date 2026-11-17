@@ -86,7 +86,7 @@ export default function Dashboard() {
         </section>
 
         <footer className="mt-4 flex flex-col items-center justify-between gap-2 border-t border-[#e2eaf4] pt-3 text-xs text-[#8aa0be] sm:flex-row shrink-0">
-          <p>V2.0 &nbsp;//&nbsp; {settings.org_name.toUpperCase()} AI INTERVIEWER</p>
+          <p>V3.0 &nbsp;//&nbsp; {settings.org_name.toUpperCase()} AI INTERVIEWER</p>
           <div className="flex items-center gap-2">
             <ShieldCheck size={14} className="text-[#80a5d0]" />
             <span>Safe</span><span>•</span><span>Private</span><span>•</span><span>Secure</span>
