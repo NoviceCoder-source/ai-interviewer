@@ -69,6 +69,27 @@ proxy.ts                   route protection (login, approval status, admin role)
 supabase/migrations/       RLS policies
 ```
 
+## MCQ tests (Phase 1)
+
+Run `supabase/migrations/20261117000000_phase1_mcq_tests.sql` in the Supabase SQL editor first.
+
+- **Question bank** (`/admin/question-bank`): topics per subject, CSV upload (download the template on the
+  page; from Excel use *Save As → CSV UTF-8*). Every row is validated; exact duplicates are skipped and
+  near-duplicates (similar wording, ≥60% character overlap) are held back until the admin imports them anyway.
+- **Test format** (`/admin/test-settings`): marks are basic 1, intermediate 2, advanced 4. Each level's mix
+  must total exactly 50 marks with at least 20 questions (defaults: Basic 24/7/3, Intermediate 14/8/5,
+  Advanced 6/6/8). The admin also sets the time limit, negative marking on/off and its value, and credit prices.
+- **Credits**: new students get the default balance on registration; a test's price is deducted atomically
+  when it starts (`start_test_attempt`). Admins top up from the Students page. Every change is in `credit_ledger`.
+- **Levels** (`/admin/levels`): a level is a list of requirements such as "5 × Basic tests, any subject,
+  score ≥ 25". Tests count toward the level the student is currently on.
+- **Deterministic by design**: questions are picked at random by code, scoring is rule-based
+  (`app/lib/tests/scoring.ts`), and correct answers never reach the browser during a test. The only LLM call
+  is the written summary on the report, with a template fallback (`app/lib/ai/testReport.ts`).
+- **Anti-cheating**: copy/paste/right-click/selection blocked; every tab or window switch is logged and
+  counted (the 5th auto-submits); being away more than 20 seconds auto-submits (measured on the server).
+  The timer is server-side, so closing the tab doesn't stop it.
+
 ## Scripts
 
 - `npm run dev` — development server

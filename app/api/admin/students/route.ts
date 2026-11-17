@@ -16,7 +16,7 @@ export async function GET(req: Request) {
   try {
     const { data, error } = await supabaseAdmin
       .from('profiles')
-      .select('id, full_name, email, contact, status, updated_at')
+      .select('id, full_name, email, contact, status, updated_at, credits')
       .eq('status', status)
       .or('role.is.null,role.eq.student')
       .order('updated_at', { ascending: false });

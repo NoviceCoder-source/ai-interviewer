@@ -2,7 +2,7 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, Mic, History, BarChart3, Settings, Bell, ChevronDown, Sparkles } from 'lucide-react';
+import { LayoutDashboard, Mic, History, BarChart3, Settings, Bell, ChevronDown, Sparkles, ClipboardList, Coins } from 'lucide-react';
 import { supabase } from '../../lib/supabase/browser';
 import { useSiteSettings } from '../../lib/SiteSettingsContext';
 import { primaryBg, primaryTint, secondaryBg, secondaryText, secondaryTint } from '../../lib/theme';
@@ -11,6 +11,7 @@ import OrgLogo from '../OrgLogo';
 const NAV = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/dashboard/setup', label: 'New Interview', icon: Mic },
+  { href: '/dashboard/tests', label: 'MCQ Tests', icon: ClipboardList },
   { href: '/dashboard/review', label: 'Past Sessions', icon: History },
   { href: '/dashboard/performance', label: 'Performance', icon: BarChart3 },
 ];
@@ -26,23 +27,27 @@ export const useStudentName = () => useContext(StudentNameContext);
 /** Sidebar + top bar shared by every student dashboard page. */
 export default function DashboardShell({ children }: { children: React.ReactNode }) {
   const [name, setName] = useState('');
+  const [credits, setCredits] = useState<number | null>(null);
+  const pathname = usePathname();
 
+  // Reloaded on navigation so the balance updates after a test is started.
   useEffect(() => {
     const loadName = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const { data } = await supabase.from('profiles').select('full_name').eq('id', user.id).single();
+      const { data } = await supabase.from('profiles').select('full_name, credits').eq('id', user.id).single();
       setName(data?.full_name || 'Student');
+      setCredits(typeof data?.credits === 'number' ? data.credits : null);
     };
     loadName();
-  }, []);
+  }, [pathname]);
 
   return (
     <StudentNameContext.Provider value={name}>
       <div className="h-screen bg-[#f5f9fe] text-ink flex overflow-hidden">
         <Sidebar />
         <div className="flex-1 min-w-0 flex flex-col">
-          <TopBar name={name} />
+          <TopBar name={name} credits={credits} />
           {children}
         </div>
       </div>
@@ -97,7 +102,7 @@ function Sidebar() {
   );
 }
 
-function TopBar({ name }: { name: string }) {
+function TopBar({ name, credits }: { name: string; credits: number | null }) {
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -111,6 +116,11 @@ function TopBar({ name }: { name: string }) {
   return (
     <header className="flex h-16 items-center justify-end border-b border-[#e4edf7] bg-white px-6 sm:px-8 shrink-0">
       <div className="flex items-center gap-5">
+        {credits !== null && (
+          <Link href="/dashboard/tests" title="Credit balance" className="flex items-center gap-1.5 rounded-full bg-[#f1f6fc] px-3 py-1.5 text-xs font-semibold text-[#173b6c]">
+            <Coins size={14} style={secondaryText} /> {credits} credits
+          </Link>
+        )}
         <button aria-label="Notifications" className="relative rounded-full p-2 text-[#173b6c] hover:bg-[#f1f6fc] transition">
           <Bell size={18} />
           <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full" style={secondaryBg} />

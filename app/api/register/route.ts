@@ -60,6 +60,18 @@ export async function POST(request: Request) {
       throw profileError;
     }
 
+    // Starting credits (spec: granted on profile creation). Never block registration on this.
+    const { data: settings } = await supabaseAdmin.from('site_settings').select('default_credits').eq('id', 1).maybeSingle();
+    const startingCredits = settings?.default_credits ?? 0;
+    if (startingCredits > 0) {
+      const { error: creditError } = await supabaseAdmin.rpc('adjust_credits', {
+        p_user: authData.user.id,
+        p_change: startingCredits,
+        p_reason: 'Starting credits',
+      });
+      if (creditError) console.error('[register] could not grant starting credits:', creditError.message);
+    }
+
     return NextResponse.json({ success: true });
   } catch (err) {
     return serverError('register', err);

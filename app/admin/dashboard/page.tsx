@@ -6,6 +6,8 @@ import { useSiteSettings } from '../../lib/SiteSettingsContext';
 import { api } from '../../lib/api';
 import type { Student } from '../../lib/types';
 import OrgLogo from '../../components/OrgLogo';
+import { AdminNav } from '../../components/admin/AdminPage';
+import CreditControl from '../../components/admin/CreditControl';
 
 type FilterStatus = 'pending' | 'approved' | 'rejected';
 
@@ -81,24 +83,16 @@ export default function AdminDashboard() {
           </div>
         </div>
         
-        {/* Added Flex Wrapper with Settings and Sign Out actions */}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => router.push('/admin/settings')}
-            className="bg-white/10 hover:bg-white/20 border border-white/10 px-6 py-2.5 rounded-xl text-sm font-bold tracking-wide transition-all"
-          >
-            SETTINGS
-          </button>
-          <button onClick={() => router.push('/admin/reports')} className="bg-white/10 hover:bg-white/20 border border-white/10 px-6 py-2.5 rounded-xl text-sm font-bold tracking-wide transition-all">
-            REPORTS
-          </button>
-          <button
-            onClick={handleSignOut}
-            className="bg-white/10 hover:bg-white/20 border border-white/10 px-6 py-2.5 rounded-xl text-sm font-bold tracking-wide transition-all"
-          >
-            SIGN OUT
-          </button>
-        </div>
+        <button
+          onClick={handleSignOut}
+          className="bg-white/10 hover:bg-white/20 border border-white/10 px-6 py-2.5 rounded-xl text-sm font-bold tracking-wide transition-all"
+        >
+          SIGN OUT
+        </button>
+      </div>
+
+      <div className="max-w-6xl mx-auto mb-8">
+        <AdminNav />
       </div>
 
       <div className="max-w-6xl mx-auto">
@@ -146,7 +140,16 @@ export default function AdminDashboard() {
                     <p className="text-gray-400 text-xs font-medium mb-3">{student.email || 'No Email Provided'}</p>
                     <div className="text-xs text-gray-300 space-y-1 bg-black/20 p-3 rounded-lg border border-white/5">
                       <div>📞 <span className="font-semibold">{student.contact || 'N/A'}</span></div>
+                      <div>🪙 <span className="font-semibold">{student.credits ?? 0} credits</span></div>
                     </div>
+                    {activeTab === 'approved' && (
+                      <CreditControl
+                        studentId={student.id}
+                        onChange={(balance) =>
+                          setStudents((prev) => prev.map((s) => (s.id === student.id ? { ...s, credits: balance } : s)))
+                        }
+                      />
+                    )}
                   </div>
 
                   <div className="flex space-x-3 mt-5">
