@@ -90,8 +90,37 @@ Run `supabase/migrations/20261117000000_phase1_mcq_tests.sql` in the Supabase SQ
   counted (the 5th auto-submits); being away more than 20 seconds auto-submits (measured on the server).
   The timer is server-side, so closing the tab doesn't stop it.
 
+## Adaptive interviews (Phase 3)
+
+Subject interviews adapt their difficulty to the student's answers. No migration is needed.
+
+- After each answer, a small AI call **only labels** it — correct, partly correct, wrong, don't know, or not an
+  answer (`app/lib/ai/judge.ts`). **Code** then applies the rule (`app/lib/ai/adaptive.ts`):
+  2 correct in a row → one level harder; 2 wrong or "don't know" in a row → one level easier
+  (Beginner ↔ Intermediate ↔ Advanced). Partly-correct answers reset both streaks; off-topic replies and
+  requests are ignored.
+- The verdict is stored on each candidate turn and the level on each interviewer turn inside `chat_history`,
+  so the level can always be replayed from the transcript.
+- The interviewer follows the verdict in its feedback and asks the next question at the new level. The
+  "moving up / stepping back" note is added by code, so it always appears. The persona that greeted the
+  student stays for the whole interview.
+- Reports (result screen, Past Sessions, admin report, PDF) show a **Level journey**: start, highest and final
+  level and every change. The grader gives more credit for correct answers at higher levels.
+- Resume interviews, MCQ tests and interviews created before this release do not adapt.
+
+## Tests
+
+```bash
+npm test
+```
+
+Runs the unit tests in `tests/` with Node's built-in test runner (adaptive rules, interview question
+counting, MCQ scoring/selection/CSV/levels/report text, resume text checks). The testing team's workbooks
+are in `testing/`.
+
 ## Scripts
 
 - `npm run dev` — development server
 - `npm run build` / `npm start` — production build
 - `npm run lint` — ESLint
+- `npm test` — unit tests

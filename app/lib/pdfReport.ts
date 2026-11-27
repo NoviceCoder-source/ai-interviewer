@@ -51,6 +51,13 @@ export function generateInterviewPDF(opts: ReportPDFOptions): jsPDF {
   if (opts.report) {
     addText(`FINAL SCORE: ${opts.report.score}%`, 16, true, [79, 70, 229]);
     addText(opts.report.summary, 11, false, [60, 60, 60]);
+    const adaptive = opts.report.adaptive;
+    if (adaptive) {
+      addText(`LEVEL JOURNEY: started ${adaptive.start} | highest ${adaptive.highest} | finished ${adaptive.final}`, 11, true, [40, 40, 40]);
+      adaptive.changes.forEach((c) =>
+        addText(`After answer ${c.afterAnswer}: ${c.from} -> ${c.to} (${c.direction === 'up' ? '2 correct in a row' : '2 wrong in a row'})`, 10, false, [80, 80, 80])
+      );
+    }
     y += 5;
     doc.line(margin, y, pageWidth - margin, y);
     y += 10;

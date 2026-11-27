@@ -3,10 +3,9 @@ import PDFParser from 'pdf2json';
 import { requireUser } from '../../lib/auth';
 import { supabaseAdmin } from '../../lib/supabase/admin';
 import { jsonError, serverError } from '../../lib/http';
+import { cleanResumeText, isReadableResume } from '../../lib/resumeText';
 
 const MAX_RESUME_BYTES = 5 * 1024 * 1024;
-/** Fewer letters than this means the PDF is effectively unreadable (a scan, or just a stray mark). */
-const MIN_RESUME_LETTERS = 50;
 
 function extractPdfText(buffer: Buffer): Promise<string> {
   const parser = new PDFParser(null, 1);
@@ -31,14 +30,8 @@ export async function POST(req: Request) {
     const buffer = Buffer.from(await file.arrayBuffer());
     if (buffer.subarray(0, 4).toString() !== '%PDF') return jsonError(400, 'Only PDF files are supported.');
 
-    // pdf2json inserts "----Page (N) Break----" markers even when a page has no text (e.g. a scanned
-    // image), so strip them before deciding whether the PDF contains anything readable.
-    const text = (await extractPdfText(buffer))
-      .replace(/\u0000/g, '')
-      .replace(/-+Page \(\d+\) Break-+/g, '')
-      .trim();
-    const letters = text.replace(/[^\p{L}]/gu, '').length;
-    if (letters < MIN_RESUME_LETTERS) return jsonError(400, 'Could not read any text from this PDF. Is it a scanned image?');
+    const text = cleanResumeText(await extractPdfText(buffer));
+    if (!isReadableResume(text)) return jsonError(400, 'Could not read any text from this PDF. Is it a scanned image?');
 
     const { error: uploadError } = await supabaseAdmin.storage
       .from('resumes')

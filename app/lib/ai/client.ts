@@ -11,7 +11,8 @@ export async function complete(
 ): Promise<string> {
   const completion = await groq.chat.completions.create({
     model: MODEL,
-    messages: [{ role: 'system', content: system }, ...messages],
+    // Only role and content go to the model; stored turns also carry app fields (level, verdict).
+    messages: [{ role: 'system', content: system }, ...messages.map(({ role, content }) => ({ role, content }))],
     temperature: options.temperature,
     ...(options.json ? { response_format: { type: 'json_object' as const } } : {}),
   });

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireUser } from '../../lib/auth';
 import { getOwnedInterview, saveReport } from '../../lib/interviews';
 import { evaluateTranscript } from '../../lib/ai/evaluator';
+import { adaptiveSummary } from '../../lib/ai/adaptive';
 import { MIN_QUESTIONS_TO_FINISH, countAnsweredQuestions, endedEarlyReport } from '../../lib/questionAnalysis';
 import { jsonError, serverError } from '../../lib/http';
 
@@ -23,15 +24,17 @@ export async function POST(req: Request) {
 
     const history = interview.chat_history ?? [];
     const answered = countAnsweredQuestions(history);
+    // Phase 3: level journey, computed by code from the stored verdicts (null for non-adaptive interviews).
+    const adaptive = adaptiveSummary(history, interview.difficulty);
     if (answered < MIN_QUESTIONS_TO_FINISH) {
-      const report = endedEarlyReport(answered);
+      const report = { ...endedEarlyReport(answered), adaptive };
       await saveReport(interview.id, report, 'failed');
       return NextResponse.json({ report });
     }
 
     // A trailing unanswered question shouldn't count against the candidate.
     const transcript = history.at(-1)?.role === 'assistant' ? history.slice(0, -1) : history;
-    const report = await evaluateTranscript(interview.subject, transcript);
+    const report = { ...(await evaluateTranscript(interview.subject, transcript, adaptive !== null)), adaptive };
     await saveReport(interview.id, report);
 
     return NextResponse.json({ report });

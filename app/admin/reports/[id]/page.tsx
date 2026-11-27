@@ -11,6 +11,7 @@ import ScoreCard from '../../../components/ScoreCard';
 import StrengthsImprovements from '../../../components/StrengthsImprovements';
 import ReportActions from '../../../components/ReportActions';
 import EndedEarlyNotice from '../../../components/EndedEarlyNotice';
+import AdaptiveJourney from '../../../components/AdaptiveJourney';
 
 export default function AdminReviewReportPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -105,6 +106,8 @@ export default function AdminReviewReportPage({ params }: { params: Promise<{ id
             <StrengthsImprovements strengths={report.strengths} improvements={report.improvements} />
           </>
         )}
+
+        {report.adaptive && <AdaptiveJourney adaptive={report.adaptive} />}
 
         <div className="grid grid-cols-3 gap-4">
           <div className="bg-white rounded-[2rem] p-6 shadow-xl text-center">
