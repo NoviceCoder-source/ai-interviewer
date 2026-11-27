@@ -16,6 +16,7 @@ import StrengthsImprovements from '../../../components/StrengthsImprovements';
 import ReportActions from '../../../components/ReportActions';
 import EndInterviewDialog from '../../../components/interview/EndInterviewDialog';
 import EndedEarlyNotice from '../../../components/EndedEarlyNotice';
+import AdaptiveJourney from '../../../components/AdaptiveJourney';
 
 type ActiveInterview = Pick<InterviewData, 'id' | 'subject' | 'difficulty'>;
 
@@ -39,6 +40,15 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
   const initializedRef = useRef(false);
 
   const questionsAsked = countAnsweredQuestions(chatHistory);
+
+  // Phase 3: the level of the latest question, and whether it just moved up or down.
+  const questionLevels = chatHistory.filter((m) => m.role === 'assistant' && m.level).map((m) => m.level!);
+  const currentLevel = questionLevels.at(-1);
+  const previousLevel = questionLevels.at(-2);
+  const order = ['Beginner', 'Intermediate', 'Advanced'];
+  const levelMove = currentLevel && previousLevel && currentLevel !== previousLevel
+    ? (order.indexOf(currentLevel) > order.indexOf(previousLevel) ? 'up' : 'down')
+    : null;
   const minQuestionsRequired = MIN_QUESTIONS_TO_FINISH;
   const hasMinimumAnswers = questionsAsked >= minQuestionsRequired;
 
@@ -187,12 +197,24 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
             <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
             <h1 className="text-white text-xl font-black uppercase tracking-widest italic">
               SESSION / <span className="text-indigo-400">{interview?.subject || 'INITIALIZING'}</span>
-              {interview?.difficulty && (
+              {interview?.difficulty && !currentLevel && (
                 <span className="ml-3 text-xs font-black text-white/30 normal-case tracking-widest">
                   [{interview.difficulty}]
                 </span>
               )}
             </h1>
+            {currentLevel && (
+              <span
+                title="Questions get harder after 2 correct answers in a row and easier after 2 wrong answers in a row."
+                className={`rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-widest ${
+                  levelMove === 'up' ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-300'
+                    : levelMove === 'down' ? 'border-amber-400/40 bg-amber-500/15 text-amber-300'
+                    : 'border-white/15 bg-white/5 text-white/60'
+                }`}
+              >
+                Level: {currentLevel}{levelMove === 'up' ? ' ↑' : levelMove === 'down' ? ' ↓' : ''}
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-3">
@@ -323,6 +345,8 @@ export default function InterviewRoom({ params }: { params: Promise<{ id: string
                     <StrengthsImprovements strengths={report.strengths} improvements={report.improvements} />
                   </>
                 )}
+
+                {report.adaptive && <AdaptiveJourney adaptive={report.adaptive} />}
 
                 <div className="grid grid-cols-3 gap-4">
                   <div className="bg-white rounded-[2rem] p-6 shadow-xl text-center">

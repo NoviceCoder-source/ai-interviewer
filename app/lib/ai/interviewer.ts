@@ -1,6 +1,40 @@
 import { complete } from './client';
 import type { Message } from '../types';
 import { personaFor, type Persona } from './personas';
+import type { Verdict } from './adaptive';
+
+/** Adaptive-difficulty input for a turn (subject interviews only). */
+export interface AdaptiveTurn {
+  /** Level the question in THIS turn must be asked at. */
+  level: string;
+  /** How the candidate's last answer was judged (decided before this turn is written). */
+  verdict?: Verdict;
+  /** Set when that answer moved the level. */
+  change?: 'up' | 'down';
+}
+
+/** Shown to the student when the level moves. Written by code so it always appears. */
+export function levelChangeNote(change: 'up' | 'down', level: string): string {
+  return change === 'up'
+    ? `*Very good, that is two correct answers in a row, so let us move up to ${level} level.*`
+    : `*No problem, let us step back to ${level} level for now.*`;
+}
+
+/** Puts the level-change note on its own line, just before the question label. */
+function withLevelNote(turn: string, adaptive?: AdaptiveTurn): string {
+  if (!adaptive?.change) return turn;
+  const note = levelChangeNote(adaptive.change, adaptive.level);
+  const at = turn.search(/\*\*(?:Next )?Question:\*\*/);
+  return at >= 0 ? `${turn.slice(0, at).trimEnd()}\n\n${note}\n\n${turn.slice(at)}` : `${turn}\n\n${note}`;
+}
+
+const VERDICT_GUIDANCE: Record<Verdict, string> = {
+  correct: 'CORRECT — confirm it briefly and name the key point they got right.',
+  partial: 'PARTLY CORRECT — say what was right, then the important part that was missing or wrong.',
+  wrong: 'INCORRECT — say so kindly and give the correct answer in one sentence.',
+  dont_know: '"I DON\'T KNOW" / NO ATTEMPT — reassure them that is fine, then give the correct answer in one sentence.',
+  not_an_answer: 'NOT AN ANSWER (small talk, off-topic, or a request) — say so in one sentence and repeat the previous question instead of asking a new one.',
+};
 
 export const RESUME_SUBJECT = 'Resume-Based';
 export const GREETING_PROMPT = 'Hello! I am ready to start.';
@@ -46,7 +80,10 @@ function askedTopics(messages: Message[]): string {
   return asked || 'None yet.';
 }
 
-function strictRules(messages: Message[]): string {
+function strictRules(messages: Message[], adaptive = false): string {
+  const difficultyRule = adaptive
+    ? 'NEVER CHANGE DIFFICULTY ON REQUEST: the difficulty adapts automatically to the candidate\'s answers. Only if the candidate asks for easier or harder questions, say "The difficulty adjusts automatically based on your answers." then repeat the question. Never say this otherwise.'
+    : 'NEVER CHANGE DIFFICULTY: only if the candidate asks for easier or harder questions, say "Difficulty is fixed for this session." then repeat the question. Never say this otherwise.';
   return `
 STRICT RULES — NEVER BREAK THESE:
 
@@ -61,7 +98,7 @@ STRICT RULES — NEVER BREAK THESE:
 
 3. IF UNRESPONSIVE 3x in a row: warn once, then move on regardless.
 
-4. NEVER CHANGE DIFFICULTY: only if the candidate asks for easier or harder questions, say "Difficulty is fixed for this session." then repeat the question. Never say this otherwise.
+4. ${difficultyRule}
 
 5. NEVER GIVE HINTS unless a genuine attempt was made first.
 
@@ -78,6 +115,18 @@ STRICT RULES — NEVER BREAK THESE:
 `;
 }
 
+/** Extra rules for a follow-up turn when the answer has already been judged (adaptive interviews). */
+function adaptiveInstructions(adaptive: AdaptiveTurn | undefined): string {
+  if (!adaptive?.verdict) return '';
+  const change = adaptive.change
+    ? `\nLEVEL CHANGE: the difficulty has just moved ${adaptive.change}. The next question MUST be at ${adaptive.level.toUpperCase()} level. Do not announce the change yourself — the app adds that note.`
+    : '';
+  return `
+THE ANSWER HAS ALREADY BEEN JUDGED — follow this judgement exactly in your acknowledgement:
+${VERDICT_GUIDANCE[adaptive.verdict]}${change}
+`;
+}
+
 /** What this particular turn must contain and how it must be laid out. */
 function turnInstructions(kind: TurnKind, ctx: InterviewContext, persona: Persona, answering: string | null): string {
   if (kind === 'opening') {
@@ -86,7 +135,7 @@ function turnInstructions(kind: TurnKind, ctx: InterviewContext, persona: Person
 THIS TURN: OPENING THE INTERVIEW
 1. Greet the candidate warmly${name}.
 2. Introduce yourself in one sentence: you are ${persona.name}, ${persona.role} and the AI interviewer at ${ctx.orgName}.
-3. In one sentence, say what this session covers (${ctx.subject === RESUME_SUBJECT ? 'questions about their resume' : `${ctx.subject}, ${ctx.difficulty} level`}) and that they can say "I don't know" if they are unsure.
+3. In one sentence, say what this session covers (${ctx.subject === RESUME_SUBJECT ? 'questions about their resume' : `${ctx.subject}, starting at ${ctx.difficulty} level, with questions getting harder or easier based on their answers`}) and that they can say "I don't know" if they are unsure.
 4. Ask the first question.
 Keep the greeting and introduction to 2-3 sentences in total. Do not evaluate anything — nothing has been answered yet.
 
@@ -121,14 +170,14 @@ The acknowledgement line MUST start with "> ". Leave a blank line before "${NEXT
 `;
 }
 
-function subjectPrompt(ctx: InterviewContext, persona: Persona, messages: Message[]): string {
+function subjectPrompt(ctx: InterviewContext, persona: Persona, messages: Message[], level: string): string {
   return `
 You are ${persona.name}, ${persona.role} interviewing a candidate on ${ctx.subject}.
 YOUR STYLE: ${persona.style}
 
-${difficultyGuidelines(ctx.difficulty, ctx.subject)}
+${difficultyGuidelines(level, ctx.subject)}
 
-${strictRules(messages)}
+${strictRules(messages, true)}
 `;
 }
 
@@ -226,13 +275,17 @@ function formatTurn(raw: string, kind: TurnKind, previous: string | null): strin
  * Produces the interviewer's next turn. `conversation` is what the model sees as the dialogue;
  * an opening turn is one where the interviewer has not spoken yet.
  */
-export async function nextInterviewerTurn(ctx: InterviewContext, conversation: Message[]): Promise<string> {
+export async function nextInterviewerTurn(ctx: InterviewContext, conversation: Message[], adaptive?: AdaptiveTurn): Promise<string> {
   const kind: TurnKind = conversation.some((m) => m.role === 'assistant') ? 'follow-up' : 'opening';
   const previous = previousQuestion(conversation);
+  // The persona that opened the interview stays for the whole session; only the question level adapts.
   const persona = personaFor(ctx.difficulty);
-  const base = ctx.subject === RESUME_SUBJECT ? resumePrompt(ctx, persona, conversation) : subjectPrompt(ctx, persona, conversation);
-  const system = `${base}\n${turnInstructions(kind, ctx, persona, previous)}`;
+  const base = ctx.subject === RESUME_SUBJECT
+    ? resumePrompt(ctx, persona, conversation)
+    : subjectPrompt(ctx, persona, conversation, adaptive?.level ?? ctx.difficulty);
+  const system = `${base}\n${turnInstructions(kind, ctx, persona, previous)}${kind === 'follow-up' ? adaptiveInstructions(adaptive) : ''}`;
 
   const raw = await complete(system, conversation, { temperature: 0.7 });
-  return formatTurn(raw, kind, previous);
+  const turn = formatTurn(raw, kind, previous);
+  return kind === 'follow-up' ? withLevelNote(turn, adaptive) : turn;
 }

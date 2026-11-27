@@ -11,6 +11,7 @@ import { secondaryText, secondaryTint } from '../../../../lib/theme';
 import type { InterviewData } from '../../../../lib/types';
 import LoadingState from '../../../../components/LoadingState';
 import EndedEarlyNotice from '../../../../components/EndedEarlyNotice';
+import AdaptiveJourney from '../../../../components/AdaptiveJourney';
 
 export default function ReviewReportPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -148,6 +149,8 @@ export default function ReviewReportPage({ params }: { params: Promise<{ id: str
             <InsightBox title="Areas for Growth" icon={<Target size={17} />} items={report.improvements} type="warning" />
           </div>
         )}
+
+        {report.adaptive && <AdaptiveJourney adaptive={report.adaptive} className="mb-4" />}
 
         {/* STATS */}
         <div className="grid grid-cols-3 gap-4 mb-4">
