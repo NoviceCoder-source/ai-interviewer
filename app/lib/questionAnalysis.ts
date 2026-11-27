@@ -1,13 +1,6 @@
 // app/lib/questionAnalysis.ts
 import type { EvaluationReport, Message } from './types';
-
-const STOP_WORDS = new Set([
-  'what', 'is', 'are', 'the', 'a', 'an', 'in', 'of', 'to', 'do', 'does', 'how',
-  'why', 'when', 'where', 'which', 'can', 'you', 'your', 'it', 'its', 'this',
-  'that', 'and', 'or', 'for', 'with', 'about', 'between', 'explain', 'describe',
-  'define', 'tell', 'me', 'difference', 'use', 'used', 'give', 'example', 'write',
-  'simple', 'basic', 'python', 'sql', 'data', 'machine', 'learning', 'analytics',
-]);
+import { normalizeQuestion, similarity } from './tests/similarity';
 
 export function stripMarkdown(text: string): string {
   return text
@@ -27,34 +20,38 @@ export function stripMarkdown(text: string): string {
     .trim();
 }
 
+const QUESTION_LABEL = /\*\*(?:Next |First )?Question:\*\*/i;
+
+/**
+ * The interviewer's question from one turn — the whole question, INCLUDING any code block.
+ * Many questions share the same sentence ("What will be printed by the following code?") and differ
+ * only in their code, so the code must be part of the comparison.
+ */
 export function extractQuestion(content: string): string {
-  // Every interviewer turn carries the same "**Question:**" / "**Next Question:**" label; it must not count as shared keywords.
-  const text = content.replace(/\*\*(?:Next )?Question:\*\*/gi, ' ');
-  const sentences = text.split(/(?<=[.?!])\s+/);
-  const questionSentence = sentences.find((s) => s.trim().endsWith('?')) || sentences[sentences.length - 1];
-  return questionSentence.toLowerCase().trim();
+  const parts = content.split(QUESTION_LABEL);
+  let question: string;
+  if (parts.length > 1) {
+    question = parts[parts.length - 1];
+  } else {
+    // No label: start at the first sentence ending with "?" and keep everything after it (e.g. code).
+    const at = content.search(/[^.!?\n]*\?/);
+    question = at >= 0 ? content.slice(at) : content;
+  }
+  const withoutFences = question.replace(/```[a-z0-9]*\n?/gi, '\n');
+  return normalizeQuestion(withoutFences);
 }
 
-export function getKeywords(text: string): Set<string> {
-  const words = text
-    .replace(/[^a-z0-9\s]/g, '')
-    .split(/\s+/)
-    .filter((w) => w.length > 2 && !STOP_WORDS.has(w));
-  return new Set(words);
-}
+/** Two turns ask the same question when their full text (code included) is at least this similar. */
+const SAME_QUESTION_SIMILARITY = 0.85;
 
 export function getUniqueQuestions(assistantMessages: Message[]): Message[] {
-  return assistantMessages.filter((msg, index) => {
-    if (index === 0) return true;
-    const currentKeywords = getKeywords(extractQuestion(msg.content));
-    if (currentKeywords.size === 0) return true;
-    const isDuplicate = assistantMessages.slice(0, index).some((prevMsg) => {
-      const prevKeywords = getKeywords(extractQuestion(prevMsg.content));
-      if (prevKeywords.size === 0) return false;
-      const overlap = [...currentKeywords].filter((w) => prevKeywords.has(w)).length;
-      return overlap / Math.max(currentKeywords.size, prevKeywords.size) >= 0.75;
-    });
-    return !isDuplicate;
+  const seen: string[] = [];
+  return assistantMessages.filter((msg) => {
+    const question = extractQuestion(msg.content);
+    if (!question) return false;
+    const repeated = seen.some((prev) => similarity(question, prev) >= SAME_QUESTION_SIMILARITY);
+    seen.push(question);
+    return !repeated;
   });
 }
 
